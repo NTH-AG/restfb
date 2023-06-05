@@ -5,7 +5,7 @@
   <artifactId>restfb</artifactId>
   <packaging>jar</packaging>
   <name>RestFB</name>
-  <version>2026.1.0</version>
+  <version>2026.1.1-NTH-AG-SNAPSHOT</version>
   <description>RestFB is a simple and flexible Facebook Graph API client written in Java.</description>
   <url>http://restfb.com</url>
   <inceptionYear>2010</inceptionYear>
@@ -13,15 +13,15 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <project.build.source>11</project.build.source>
-    <project.build.target>11</project.build.target>
-    <project.build.release>11</project.build.release>
+    <project.build.source>17</project.build.source>
+    <project.build.target>17</project.build.target>
+	<project.build.release>17</project.build.release>
 
     <!-- dependency versions -->
     <version.junit>5.13.4</version.junit>
-    <version.lombok>1.18.42</version.lombok>
-    <version.mockito>5.21.0</version.mockito>
-    <version.assertj>3.27.6</version.assertj>
+    <version.lombok>1.18.40</version.lombok>
+    <version.mockito>5.19.0</version.mockito>
+    <version.assertj>3.27.4</version.assertj>
     <version.slf4j>[1.7.32,)</version.slf4j>
     <version.bundlor>1.1.2.RELEASE</version.bundlor>
     <version.sonar.maven.plugin>3.11.0.3922</version.sonar.maven.plugin>
@@ -216,6 +216,7 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.14.1</version>
         <configuration>
+		  <forceLegacyJavacApi>true</forceLegacyJavacApi>
           <fork>true</fork>
           <encoding>UTF-8</encoding>
           <source>${project.build.source}</source>
@@ -300,6 +301,8 @@
           </execution>
         </executions>
       </plugin>
+      <!-- Use maven-deploy-plugin -->
+      <!--
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
@@ -309,6 +312,12 @@
           <publishingServerId>central-portal</publishingServerId>
           <autoPublish>true</autoPublish>
         </configuration>
+      </plugin>
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>3.1.1</version>
       </plugin>
       <plugin>
         <groupId>org.projectlombok</groupId>
