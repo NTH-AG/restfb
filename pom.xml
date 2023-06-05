@@ -5,7 +5,7 @@
   <artifactId>restfb</artifactId>
   <packaging>jar</packaging>
   <name>RestFB</name>
-  <version>2025.5.1</version>
+  <version>2025.5.2-NTH-AG-SNAPSHOT</version>
   <description>RestFB is a simple and flexible Facebook Graph API client written in Java.</description>
   <url>http://restfb.com</url>
   <inceptionYear>2010</inceptionYear>
@@ -13,8 +13,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <project.build.source>1.8</project.build.source>
-    <project.build.target>1.8</project.build.target>
+    <project.build.source>17</project.build.source>
+    <project.build.target>17</project.build.target>
 
     <!-- dependency versions -->
     <version.junit>5.12.0</version.junit>
@@ -206,7 +206,7 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.14.0</version>
         <configuration>
-          <fork>true</fork>
+          <forceLegacyJavacApi>true</forceLegacyJavacApi>
           <encoding>UTF-8</encoding>
           <source>${project.build.source}</source>
           <target>${project.build.target}</target>
@@ -286,6 +286,8 @@
           </execution>
         </executions>
       </plugin>
+      <!-- Use maven-deploy-plugin -->
+      <!--
       <plugin>
         <groupId>org.sonatype.plugins</groupId>
         <artifactId>nexus-staging-maven-plugin</artifactId>
@@ -297,6 +299,12 @@
           <autoReleaseAfterClose>false</autoReleaseAfterClose>
           <stagingProgressTimeoutMinutes>60</stagingProgressTimeoutMinutes>
         </configuration>
+      </plugin>
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>3.1.1</version>
       </plugin>
       <plugin>
         <groupId>org.projectlombok</groupId>
