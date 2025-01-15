@@ -21,6 +21,8 @@
  */
 package com.restfb.types.whatsapp.platform.status;
 
+import com.restfb.Facebook;
+
 public enum CategoryType {
 
   @Deprecated
@@ -37,6 +39,11 @@ public enum CategoryType {
    * This applies any time it has been more than 24 hours since the last customer message.
    */
   authentication, //
+  /**
+   * Indicates an authentication-international conversation.
+   */
+  @Facebook("authentication-international")
+  authentication_international, //
   /**
    * Indicates the conversation was opened by a business sending template categorized as MARKETING to the customer. This
    * applies any time it has been more than 24 hours since the last customer message.
