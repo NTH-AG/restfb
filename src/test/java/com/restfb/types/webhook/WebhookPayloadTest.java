@@ -21,6 +21,10 @@
  */
 package com.restfb.types.webhook;
 
+import com.restfb.types.webhook.whatsapp.AbstractWhatsappBaseChangeValue;
+import com.restfb.types.webhook.whatsapp.WhatsappMessagesValue;
+import com.restfb.types.whatsapp.platform.status.CategoryType;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.restfb.DefaultJsonMapper;
@@ -42,6 +46,24 @@ public class WebhookPayloadTest {
 
 		JsonMapper mapper = new DefaultJsonMapper();
 		WebhookObject whObject = mapper.toJavaObject(payload, WebhookObject.class);
+	}
+
+	@Test
+	public void testPayloadAuthenticationInternational() {
+		String payload = "{\"object\":\"whatsapp_business_account\",\"entry\":[{\"id\":\"9999999999\",\"changes\":[{\"value\":{\"messaging_product\":\"whatsapp\",\"metadata\":{\"display_phone_number\":\"1111111\",\"phone_number_id\":\"222222222\"},\"statuses\":[{\"id\":\"wamid.bla\",\"status\":\"delivered\",\"timestamp\":\"1685965154\",\"recipient_id\":\"999999999\",\"conversation\":{\"id\":\"698ed3cebasdas23asd44baa7c5387fd9013\",\"origin\":{\"type\":\"marketing\"}},\"pricing\":{\"billable\":true,\"pricing_model\":\"CBP\",\"category\":\"authentication-international\"}}]},\"field\":\"messages\"}]}]}";
+
+		JsonMapper mapper = new DefaultJsonMapper();
+		WebhookObject whObject = mapper.toJavaObject(payload, WebhookObject.class);
+		whObject.getEntryList().forEach(entry -> {
+			entry.getChanges().forEach(change -> {
+				Assertions.assertTrue(change.getValue().isWhatsapp());
+				AbstractWhatsappBaseChangeValue value = change.getValue().convertChangeValue(AbstractWhatsappBaseChangeValue.class);
+				Assertions.assertInstanceOf(WhatsappMessagesValue.class, value);
+				((WhatsappMessagesValue) value).getStatuses().forEach(status -> {
+					Assertions.assertEquals(CategoryType.authentication_international, status.getPricing().getCategory());
+				});
+			});
+		});
 	}
 
 }
