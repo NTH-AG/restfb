@@ -33,6 +33,11 @@ public class Pricing extends AbstractFacebookType {
   @Setter
   @Facebook("pricing_model")
   private String pricingModel;
+  
+  @Getter
+  @Setter
+  @Facebook
+  private String type;
 
   @Getter
   @Setter
