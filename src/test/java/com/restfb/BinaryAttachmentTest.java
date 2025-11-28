@@ -27,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -51,21 +53,22 @@ class BinaryAttachmentTest {
 
   @Test
   void checkInputStream() {
-    InputStream stream = this.getClass().getClassLoader().getResourceAsStream("json/account.json");
-    BinaryAttachment att = BinaryAttachment.with("myfile.jpg", stream);
+    Supplier<InputStream> supplier = () -> new BufferedInputStream(
+            Objects.requireNonNull(this.getClass().getClassLoader().getResourceAsStream("json/account.json")));
+    BinaryAttachment att = BinaryAttachment.with("myfile.jpg", supplier);
     assertThat(att).hasFileName("myfile.jpg");
-    assertThat(att.getData()).isInstanceOf(BufferedInputStream.class);
+    assertThat(att.getData()).isInstanceOf(InputStream.class);
   }
 
   @Test
   void checkInputStreamNull() {
-    assertThrows(NullPointerException.class, () -> BinaryAttachment.with("filename", (InputStream) null));
+    assertThrows(NullPointerException.class, () -> BinaryAttachment.with("filename", (Supplier<InputStream>) null));
   }
 
   @Test
   void checkContentTypeStream() {
-    InputStream stream = getClass().getResourceAsStream("/binary/fruits.png");
-    BinaryAttachment att = BinaryAttachment.with("example.png", stream);
+    Supplier<InputStream> supplier = () -> new BufferedInputStream(Objects.requireNonNull(getClass().getResourceAsStream("/binary/fruits.png")));
+    BinaryAttachment att = BinaryAttachment.with("example.png", supplier);
     assertThat(att).hasContentType("image/png");
   }
 

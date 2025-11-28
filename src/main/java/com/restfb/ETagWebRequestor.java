@@ -23,8 +23,8 @@ package com.restfb;
 
 import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
 
-import java.io.IOException;
-import java.net.HttpURLConnection;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -67,33 +67,31 @@ public class ETagWebRequestor extends DefaultWebRequestor {
   private volatile boolean useCache = true;
 
   @Override
-  protected void customizeConnection(HttpURLConnection connection) {
-    if (isUseCache() && connection.getRequestMethod().equals(HttpMethod.GET.name())) {
-      ETagResponse resp = etagCache.get(connection.getURL().toString());
+  protected void customizeRequest(HttpRequest.Builder builder, Request request, HttpMethod httpMethod) {
+    if (isUseCache() && HttpMethod.GET.equals(httpMethod)) {
+      ETagResponse resp = etagCache.get(request.getFullUrl());
       if (resp != null) {
         currentETagRespThreadLocal.set(resp);
-        connection.addRequestProperty("If-None-Match", resp.getEtag());
+        builder.header("If-None-Match", resp.getEtag());
       }
     }
   }
 
   @Override
-  protected Response fetchResponse(HttpURLConnection httpUrlConnection) throws IOException {
+  protected Response createResponse(Request request, HttpMethod httpMethod, HttpResponse<byte[]> httpResponse) {
     try {
-      if (httpUrlConnection.getRequestMethod().equals(HttpMethod.GET.name())) {
-        if (httpUrlConnection.getResponseCode() == HTTP_NOT_MODIFIED && currentETagRespThreadLocal.get() != null) {
+      if (HttpMethod.GET.equals(httpMethod)) {
+        if (httpResponse.statusCode() == HTTP_NOT_MODIFIED && currentETagRespThreadLocal.get() != null) {
           ETagResponse etagResp = currentETagRespThreadLocal.get();
-          return new Response(httpUrlConnection.getResponseCode(), etagResp.getBody());
+          return new Response(httpResponse.statusCode(), etagResp.getBody());
         } else {
-          Response resp = super.fetchResponse(httpUrlConnection);
-          if (httpUrlConnection.getHeaderField("ETag") != null) {
-            etagCache.put(httpUrlConnection.getURL().toString(),
-              new ETagResponse(httpUrlConnection.getHeaderField("ETag"), resp.getBody()));
-          }
+          Response resp = super.createResponse(request, httpMethod, httpResponse);
+          httpResponse.headers().firstValue("ETag").ifPresent(etag ->
+            etagCache.put(request.getFullUrl(), new ETagResponse(etag, resp.getBody())));
           return resp;
         }
       } else {
-        return super.fetchResponse(httpUrlConnection);
+        return super.createResponse(request, httpMethod, httpResponse);
       }
     } finally {
       currentETagRespThreadLocal.remove();

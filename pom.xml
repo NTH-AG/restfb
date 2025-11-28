@@ -15,6 +15,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <project.build.source>11</project.build.source>
     <project.build.target>11</project.build.target>
+    <project.build.release>11</project.build.release>
 
     <!-- dependency versions -->
     <version.junit>5.13.4</version.junit>
@@ -218,8 +219,12 @@
           <encoding>UTF-8</encoding>
           <source>${project.build.source}</source>
           <target>${project.build.target}</target>
-          <showDeprecation>true</showDeprecation>
+          <release>${project.build.release}</release>
+          <showDeprecation>false</showDeprecation>
           <showWarnings>true</showWarnings>
+          <compilerArgs>
+            <arg>-Xlint:-deprecation</arg>
+          </compilerArgs>
         </configuration>
       </plugin>
       <plugin>
