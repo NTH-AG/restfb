@@ -23,12 +23,25 @@ package com.restfb;
 
 import static com.restfb.logging.RestFBLogger.HTTP_LOGGER;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpRequest.BodyPublisher;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.*;
 import java.util.function.BiConsumer;
 
@@ -285,7 +298,20 @@ public class DefaultWebRequestor implements WebRequestor {
    * @since 1.6.3
    */
   protected HttpURLConnection openConnection(URL url) throws IOException {
-    return (HttpURLConnection) url.openConnection();
+    return new Java11HttpClientConnection(url, createHttpClientBuilder());
+  }
+
+  /**
+   * Factory for the HTTP client builder used by {@link Java11HttpClientConnection}.
+   *
+   * <p>
+   * Subclasses may override this if they need a custom executor, SSL context, or proxy configuration.
+   * </p>
+   *
+   * @return pre-configured {@link HttpClient.Builder}
+   */
+  protected HttpClient.Builder createHttpClientBuilder() {
+    return HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL);
   }
 
   /**
@@ -506,6 +532,320 @@ public class DefaultWebRequestor implements WebRequestor {
 
     private static String getHeaderOrEmpty(HttpURLConnection connection, String fieldName) {
       return StringUtils.trimToEmpty(connection.getHeaderField(fieldName));
+    }
+  }
+
+  /**
+   * HttpURLConnection-compatible wrapper backed by the Java 11 {@link HttpClient}.
+   */
+  private static final class Java11HttpClientConnection extends HttpURLConnection {
+
+    private static final int HTTP_ERROR_THRESHOLD = 400;
+
+    private final HttpClient.Builder httpClientBuilder;
+    private final Map<String, List<String>> requestHeaders = new LinkedHashMap<>();
+    private Map<String, List<String>> responseHeaders = Collections.emptyMap();
+    private List<Map.Entry<String, List<String>>> responseHeaderIndex = Collections.emptyList();
+    private final BodyStorage bodyStorage = new BodyStorage();
+
+    private HttpResponse<byte[]> httpResponse;
+    private IOException sendException;
+    private int readTimeoutMillis;
+    private int connectTimeoutMillis;
+
+    Java11HttpClientConnection(URL url, HttpClient.Builder builder) {
+      super(url);
+      this.httpClientBuilder = builder;
+    }
+
+    @Override
+    public void connect() {
+      connected = true;
+    }
+
+    @Override
+    public void disconnect() {
+      try {
+        bodyStorage.close();
+      } catch (IOException e) {
+        HTTP_LOGGER.warn("Unable to close request body storage", e);
+      }
+    }
+
+    @Override
+    public boolean usingProxy() {
+      return false;
+    }
+
+    @Override
+    public void setReadTimeout(int timeout) {
+      this.readTimeoutMillis = timeout;
+    }
+
+    @Override
+    public int getReadTimeout() {
+      return readTimeoutMillis;
+    }
+
+    @Override
+    public void setConnectTimeout(int timeout) {
+      this.connectTimeoutMillis = timeout;
+    }
+
+    @Override
+    public int getConnectTimeout() {
+      return connectTimeoutMillis;
+    }
+
+    @Override
+    public void setRequestProperty(String key, String value) {
+      if (key == null) {
+        throw new NullPointerException("Request header key must not be null");
+      }
+      List<String> values = new ArrayList<>();
+      values.add(value);
+      requestHeaders.put(key, values);
+    }
+
+    @Override
+    public void addRequestProperty(String key, String value) {
+      if (key == null) {
+        throw new NullPointerException("Request header key must not be null");
+      }
+      requestHeaders.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+    }
+
+    @Override
+    public Map<String, List<String>> getRequestProperties() {
+      if (connected) {
+        throw new IllegalStateException("Cannot access request headers after connection is made");
+      }
+      return Collections.unmodifiableMap(requestHeaders);
+    }
+
+    @Override
+    public OutputStream getOutputStream() throws IOException {
+      if (!getDoOutput()) {
+        setDoOutput(true);
+      }
+      return bodyStorage.outputStream();
+    }
+
+    @Override
+    public InputStream getInputStream() throws IOException {
+      ensureResponse();
+      if (getResponseCode() >= HTTP_ERROR_THRESHOLD) {
+        throw new IOException(buildErrorMessage());
+      }
+      return toStream(httpResponse.body());
+    }
+
+    @Override
+    public InputStream getErrorStream() {
+      try {
+        ensureResponse();
+        if (getResponseCode() >= HTTP_ERROR_THRESHOLD || getResponseCode() != HttpURLConnection.HTTP_OK) {
+          return toStream(httpResponse.body());
+        }
+      } catch (IOException e) {
+        return null;
+      }
+      return null;
+    }
+
+    @Override
+    public int getResponseCode() throws IOException {
+      ensureResponse();
+      return httpResponse.statusCode();
+    }
+
+    @Override
+    public String getResponseMessage() throws IOException {
+      ensureResponse();
+      return "";
+    }
+
+    @Override
+    public Map<String, List<String>> getHeaderFields() {
+      try {
+        ensureResponse();
+      } catch (IOException e) {
+        return Collections.emptyMap();
+      }
+      return responseHeaders;
+    }
+
+    @Override
+    public String getHeaderField(String name) {
+      try {
+        ensureResponse();
+      } catch (IOException e) {
+        return null;
+      }
+
+      if (name == null) {
+        return null;
+      }
+
+      for (Map.Entry<String, List<String>> entry : responseHeaders.entrySet()) {
+        if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(name)) {
+          return entry.getValue().isEmpty() ? null : entry.getValue().get(0);
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public String getHeaderFieldKey(int n) {
+      try {
+        ensureResponse();
+      } catch (IOException e) {
+        return null;
+      }
+      if (n < 0 || n >= responseHeaderIndex.size()) {
+        return null;
+      }
+      return responseHeaderIndex.get(n).getKey();
+    }
+
+    @Override
+    public String getHeaderField(int n) {
+      try {
+        ensureResponse();
+      } catch (IOException e) {
+        return null;
+      }
+      if (n < 0 || n >= responseHeaderIndex.size()) {
+        return null;
+      }
+      List<String> values = responseHeaderIndex.get(n).getValue();
+      return values.isEmpty() ? null : values.get(0);
+    }
+
+    private void ensureResponse() throws IOException {
+      if (httpResponse != null) {
+        return;
+      }
+
+      if (sendException != null) {
+        throw sendException;
+      }
+
+      try {
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(url.toURI());
+        String methodName = Optional.ofNullable(method).orElse(HttpMethod.GET.name());
+        requestBuilder.method(methodName, buildBodyPublisher());
+
+        if (readTimeoutMillis > 0) {
+          requestBuilder.timeout(Duration.ofMillis(readTimeoutMillis));
+        }
+
+        requestHeaders.forEach((k, v) -> v.forEach(value -> requestBuilder.header(k, value)));
+
+        if (connectTimeoutMillis > 0) {
+          httpClientBuilder.connectTimeout(Duration.ofMillis(connectTimeoutMillis));
+        }
+
+        HttpClient client = httpClientBuilder.build();
+        httpResponse = client.send(requestBuilder.build(), BodyHandlers.ofByteArray());
+        responseHeaders = createHeaderFieldMap(httpResponse);
+      } catch (URISyntaxException e) {
+        sendException = new IOException("Unable to create request URI", e);
+        throw sendException;
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        sendException = new IOException("Interrupted while performing request", e);
+        throw sendException;
+      } catch (IOException e) {
+        sendException = e;
+        throw e;
+      } finally {
+        try {
+          bodyStorage.close();
+        } catch (IOException e) {
+          HTTP_LOGGER.warn("Unable to cleanup request body storage", e);
+        }
+      }
+    }
+
+    private BodyPublisher buildBodyPublisher() throws IOException {
+      if (!getDoOutput() || !bodyStorage.hasData()) {
+        return BodyPublishers.noBody();
+      }
+
+      bodyStorage.prepareForRead();
+      Path bodyPath = bodyStorage.getTempFile();
+
+      return BodyPublishers.ofInputStream(() -> {
+        try {
+          return Files.newInputStream(bodyPath, StandardOpenOption.READ);
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      });
+    }
+
+    private Map<String, List<String>> createHeaderFieldMap(HttpResponse<byte[]> response) {
+      Map<String, List<String>> headers = new LinkedHashMap<>();
+      response.headers().map().forEach((k, v) -> headers.put(k, Collections.unmodifiableList(v)));
+      responseHeaders = Collections.unmodifiableMap(headers);
+      responseHeaderIndex = new ArrayList<>(headers.entrySet());
+      return responseHeaders;
+    }
+
+    private static InputStream toStream(byte[] body) {
+      byte[] safeBody = Optional.ofNullable(body).orElse(new byte[0]);
+      return new ByteArrayInputStream(safeBody);
+    }
+
+    private String buildErrorMessage() throws IOException {
+      return "Server returned HTTP response code: " + getResponseCode() + " for URL: " + url;
+    }
+
+    private static final class BodyStorage implements Closeable {
+
+      private Path tempFile;
+      private OutputStream outputStream;
+      private boolean hasData;
+
+      OutputStream outputStream() throws IOException {
+        if (outputStream == null) {
+          tempFile = Files.createTempFile("restfb-request", ".bin");
+          outputStream = Files.newOutputStream(tempFile, StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+        }
+        hasData = true;
+        return outputStream;
+      }
+
+      boolean hasData() {
+        return hasData;
+      }
+
+      Path getTempFile() {
+        return tempFile;
+      }
+
+      void prepareForRead() throws IOException {
+        if (outputStream != null) {
+          outputStream.flush();
+          outputStream.close();
+          outputStream = null;
+        }
+      }
+
+      @Override
+      public void close() throws IOException {
+        if (outputStream != null) {
+          outputStream.close();
+          outputStream = null;
+        }
+        if (tempFile != null) {
+          Files.deleteIfExists(tempFile);
+          tempFile = null;
+        }
+        hasData = false;
+      }
     }
   }
 
