@@ -458,9 +458,14 @@ public class DefaultWebRequestor implements WebRequestor {
     customizeRequest(builder, request, httpMethod);
 
     switch (httpMethod) {
-        case GET: builder.GET();break;
-        case DELETE: builder.DELETE();break;
-        default: throw new IllegalArgumentException("Unsupported httpMethod used");
+        case GET:
+          builder.GET();
+          break;
+        case DELETE:
+          builder.DELETE();
+          break;
+        default:
+          throw new IllegalArgumentException("Unsupported httpMethod used");
     }
 
     HttpRequest httpRequest = builder.build();

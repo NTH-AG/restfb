@@ -34,9 +34,9 @@ import lombok.Setter;
  */
 public class GraphResponse extends AbstractFacebookType {
 
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    /**
+  /**
    * <code>true</code> if publishing of the object was successful, <code>false</code> otherwise.
    *
    * if the success field is not provided by Facebook, we check if the id field is present
