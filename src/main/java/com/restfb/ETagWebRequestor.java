@@ -78,20 +78,21 @@ public class ETagWebRequestor extends DefaultWebRequestor {
   }
 
   @Override
-  protected Response createResponse(Request request, HttpMethod httpMethod, HttpResponse<byte[]> httpResponse) {
+  protected Response createResponse(HttpResponse<byte[]> httpResponse) {
     try {
-      if (HttpMethod.GET.equals(httpMethod)) {
+      if (HttpMethod.GET.name().equals(httpResponse.request().method())) {
         if (httpResponse.statusCode() == HTTP_NOT_MODIFIED && currentETagRespThreadLocal.get() != null) {
           ETagResponse etagResp = currentETagRespThreadLocal.get();
           return new Response(httpResponse.statusCode(), etagResp.getBody());
         } else {
-          Response resp = super.createResponse(request, httpMethod, httpResponse);
+          Response resp = super.createResponse(httpResponse);
+          String fullUrl = httpResponse.request().uri().toString();
           httpResponse.headers().firstValue("ETag").ifPresent(etag ->
-            etagCache.put(request.getFullUrl(), new ETagResponse(etag, resp.getBody())));
+            etagCache.put(fullUrl, new ETagResponse(etag, resp.getBody())));
           return resp;
         }
       } else {
-        return super.createResponse(request, httpMethod, httpResponse);
+        return super.createResponse(httpResponse);
       }
     } finally {
       currentETagRespThreadLocal.remove();

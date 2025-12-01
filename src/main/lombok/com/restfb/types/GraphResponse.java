@@ -32,9 +32,11 @@ import lombok.Setter;
  * <p>
  * Id, post_id and success field are accessible. Have a look at the fields and methods javadoc
  */
-public class GraphResponse {
+public class GraphResponse extends AbstractFacebookType {
 
-  /**
+    private static final long serialVersionUID = 1L;
+
+    /**
    * <code>true</code> if publishing of the object was successful, <code>false</code> otherwise.
    *
    * if the success field is not provided by Facebook, we check if the id field is present

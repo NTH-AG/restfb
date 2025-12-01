@@ -147,8 +147,8 @@ public class DefaultWebRequestor implements WebRequestor {
         publisher = bodyPublisher.build();
       }
 
-      HttpRequest httpRequest = builder.method(HttpMethod.POST.name(), publisher).build();
-      return sendRequest(request, HttpMethod.POST, httpRequest);
+      HttpRequest httpRequest = builder.POST(publisher).build();
+      return sendRequest(httpRequest);
     } finally {
       closeAttachmentsOnAutoClose(request.getBinaryAttachments());
       closeQuietly(bodyPublisher);
@@ -207,8 +207,8 @@ public class DefaultWebRequestor implements WebRequestor {
         publisher = BodyPublishers.ofString(payload, StringUtils.ENCODING_CHARSET);
       }
 
-      HttpRequest httpRequest = builder.method(HttpMethod.POST.name(), publisher).build();
-      return sendRequest(request, HttpMethod.POST, httpRequest);
+      HttpRequest httpRequest = builder.POST(publisher).build();
+      return sendRequest(httpRequest);
     } finally {
       closeAttachmentsOnAutoClose(binaryAttachments);
       closeQuietly(bodyPublisher);
@@ -457,16 +457,22 @@ public class DefaultWebRequestor implements WebRequestor {
     initHeaderAccessToken(builder, request);
     customizeRequest(builder, request, httpMethod);
 
-    HttpRequest httpRequest = builder.method(httpMethod.name(), BodyPublishers.noBody()).build();
-    return sendRequest(request, httpMethod, httpRequest);
+    switch (httpMethod) {
+        case GET: builder.GET();break;
+        case DELETE: builder.DELETE();break;
+        default: throw new IllegalArgumentException("Unsupported httpMethod used");
+    }
+
+    HttpRequest httpRequest = builder.build();
+    return sendRequest(httpRequest);
   }
 
-  private Response sendRequest(Request request, HttpMethod httpMethod, HttpRequest httpRequest) throws IOException {
+  private Response sendRequest(HttpRequest httpRequest) throws IOException {
     try {
       HttpResponse<byte[]> httpResponse = getHttpClient().send(httpRequest, BodyHandlers.ofByteArray());
       HTTP_LOGGER.trace("Response headers: {}", httpResponse.headers().map());
       fillHeaderAndDebugInfo(httpResponse);
-      return createResponse(request, httpMethod, httpResponse);
+      return createResponse(httpResponse);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IOException("Interrupted while making request", e);
@@ -487,7 +493,7 @@ public class DefaultWebRequestor implements WebRequestor {
     debugHeaderInfo = factory.build();
   }
 
-  protected Response createResponse(Request request, HttpMethod httpMethod, HttpResponse<byte[]> httpResponse) {
+  protected Response createResponse(HttpResponse<byte[]> httpResponse) {
     byte[] body = Optional.ofNullable(httpResponse.body()).orElse(new byte[0]);
     Response response = new Response(httpResponse.statusCode(), StringUtils.toString(body));
     HTTP_LOGGER.debug("Facebook responded with {}", response);
