@@ -45,7 +45,6 @@ import java.util.*;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
-
 import com.restfb.types.FacebookReelAttachment;
 import com.restfb.util.StringUtils;
 import com.restfb.util.UrlUtils;
@@ -56,6 +55,9 @@ import com.restfb.util.UrlUtils;
  * @author <a href="http://restfb.com">Mark Allen</a>
  */
 public class DefaultWebRequestor implements WebRequestor {
+  private static final String CONTENT_TYPE_JSON = "application/json";
+  private static final String CONTENT_TYPE_FORM_URLENCODED = "application/x-www-form-urlencoded";
+
   /**
    * Arbitrary unique boundary marker for multipart {@code POST}s.
    */
@@ -80,6 +82,8 @@ public class DefaultWebRequestor implements WebRequestor {
    * By default, how long should we wait for a response (in ms)?
    */
   private static final int DEFAULT_READ_TIMEOUT_IN_MS = 180000;
+
+  public static final String HEADER_CONTENT_TYPE = "Content-Type";
 
   private Map<String, List<String>> currentHeaders;
 
@@ -182,10 +186,10 @@ public class DefaultWebRequestor implements WebRequestor {
 
       if (!binaryAttachments.isEmpty()) {
         setMultipartRequestProperties(builder);
-      }
-
-      if (request.hasBody()) {
+      } else if (request.hasBody()) {
         setJsonRequestProperties(builder);
+      } else {
+        setFormUrlEncodedRequestProperties(builder);
       }
 
       customizeRequest(builder, request, HttpMethod.POST);
@@ -198,7 +202,8 @@ public class DefaultWebRequestor implements WebRequestor {
         }
         publisher = bodyPublisher.build();
       } else {
-        String payload = request.hasBody() ? request.getBody().getData() : Optional.ofNullable(request.getParameters()).orElse("");
+        String payload =
+            request.hasBody() ? request.getBody().getData() : Optional.ofNullable(request.getParameters()).orElse("");
         publisher = BodyPublishers.ofString(payload, StringUtils.ENCODING_CHARSET);
       }
 
@@ -210,30 +215,38 @@ public class DefaultWebRequestor implements WebRequestor {
     }
   }
 
-  private void writeBinaryAttachments(List<BinaryAttachment> binaryAttachments, OutputStream outputStream) throws IOException {
+  private void writeBinaryAttachments(List<BinaryAttachment> binaryAttachments, OutputStream outputStream)
+      throws IOException {
     for (BinaryAttachment binaryAttachment : binaryAttachments) {
       writeBinaryAttachmentToOutputStream(binaryAttachment, outputStream);
     }
   }
 
-  private void setJsonRequestProperties(HttpRequest.Builder builder) {
-    builder.header("Content-Type", "application/json");
+  private void setMultipartRequestProperties(HttpRequest.Builder builder) {
+    builder.header(HEADER_CONTENT_TYPE, "multipart/form-data;boundary=" + MULTIPART_BOUNDARY);
   }
 
-  private void setMultipartRequestProperties(HttpRequest.Builder builder) {
-    builder.header("Content-Type", "multipart/form-data;boundary=" + MULTIPART_BOUNDARY);
+  private void setJsonRequestProperties(HttpRequest.Builder builder) {
+    builder.header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
+  }
+
+  private void setFormUrlEncodedRequestProperties(HttpRequest.Builder builder) {
+    builder.header(HEADER_CONTENT_TYPE, CONTENT_TYPE_FORM_URLENCODED);
   }
 
   private String buildPostUrl(Request request, List<BinaryAttachment> binaryAttachments) {
-    return request.getUrl() + ((!binaryAttachments.isEmpty() || request.hasBody()) ? "?" + request.getParameters() : "");
+    return request.getUrl()
+        + ((!binaryAttachments.isEmpty() || request.hasBody()) ? "?" + request.getParameters() : "");
   }
 
-  private void writeBinaryAttachmentToOutputStream(BinaryAttachment binaryAttachment, OutputStream outputStream) throws IOException {
+  private void writeBinaryAttachmentToOutputStream(BinaryAttachment binaryAttachment, OutputStream outputStream)
+      throws IOException {
     StringBuilder formData = createBinaryAttachmentFormData(binaryAttachment);
     outputStream.write(formData.toString().getBytes(StringUtils.ENCODING_CHARSET));
     write(binaryAttachment.getData(), outputStream, MULTIPART_DEFAULT_BUFFER_SIZE);
     outputStream.write((MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY
-            + MULTIPART_TWO_HYPHENS + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE).getBytes(StringUtils.ENCODING_CHARSET));
+        + MULTIPART_TWO_HYPHENS + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE)
+      .getBytes(StringUtils.ENCODING_CHARSET));
   }
 
   private static void writeRequestToOutputStream(Request request, OutputStream outputStream) throws IOException {
@@ -247,9 +260,9 @@ public class DefaultWebRequestor implements WebRequestor {
   private static void logRequestAndAttachmentOnDebug(Request request, List<BinaryAttachment> binaryAttachments) {
     if (HTTP_LOGGER.isDebugEnabled()) {
       HTTP_LOGGER.debug("Executing a POST to " + request.getUrl() + " with parameters "
-              + (!binaryAttachments.isEmpty() ? "" : "(sent in request body): ")
-              + UrlUtils.urlDecode(request.getParameters())
-              + (!binaryAttachments.isEmpty() ? " and " + binaryAttachments.size() + " binary attachment[s]." : ""));
+          + (!binaryAttachments.isEmpty() ? "" : "(sent in request body): ")
+          + UrlUtils.urlDecode(request.getParameters())
+          + (!binaryAttachments.isEmpty() ? " and " + binaryAttachments.size() + " binary attachment[s]." : ""));
     }
   }
 
@@ -268,7 +281,8 @@ public class DefaultWebRequestor implements WebRequestor {
 
   private void closeAttachmentsOnAutoClose(List<BinaryAttachment> binaryAttachments) {
     if (autocloseBinaryAttachmentStream && !binaryAttachments.isEmpty()) {
-      binaryAttachments.stream().filter(BinaryAttachment::hasBinaryData).map(BinaryAttachment::getData).forEach(this::closeQuietly);
+      binaryAttachments.stream().filter(BinaryAttachment::hasBinaryData).map(BinaryAttachment::getData)
+        .forEach(this::closeQuietly);
     }
   }
 
