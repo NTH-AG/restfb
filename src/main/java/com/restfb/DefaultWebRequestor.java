@@ -37,14 +37,13 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpRequest.BodyPublisher;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.*;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
+import com.restfb.request.MultipartFormBodyPublisher;
+import com.restfb.request.TempFileBodyPublisher;
 import com.restfb.types.FacebookReelAttachment;
 import com.restfb.util.StringUtils;
 import com.restfb.util.UrlUtils;
@@ -62,16 +61,6 @@ public class DefaultWebRequestor implements WebRequestor {
    * Arbitrary unique boundary marker for multipart {@code POST}s.
    */
   private static final String MULTIPART_BOUNDARY = "**boundarystringwhichwill**neverbeencounteredinthewild**";
-
-  /**
-   * Line separator for multipart {@code POST}s.
-   */
-  private static final String MULTIPART_CARRIAGE_RETURN_AND_NEWLINE = "\r\n";
-
-  /**
-   * Hyphens for multipart {@code POST}s.
-   */
-  private static final String MULTIPART_TWO_HYPHENS = "--";
 
   /**
    * Default buffer size for multipart {@code POST}s.
@@ -187,10 +176,8 @@ public class DefaultWebRequestor implements WebRequestor {
       BodyPublisher publisher;
       if (!binaryAttachments.isEmpty()) {
         setMultipartRequestProperties(builder);
-        multipartBodyPublisher = new MultipartFormBodyPublisher();
-        for (BinaryAttachment attachment : binaryAttachments) {
-          multipartBodyPublisher.addBinaryAttachment(attachment);
-        }
+        multipartBodyPublisher = new MultipartFormBodyPublisher(MULTIPART_BOUNDARY, MULTIPART_DEFAULT_BUFFER_SIZE);
+        multipartBodyPublisher.addAttachments(binaryAttachments);
         publisher = multipartBodyPublisher.build();
       } else {
         if (request.hasBody()) {
@@ -355,17 +342,6 @@ public class DefaultWebRequestor implements WebRequestor {
    *          The binary attachment for which to create the form field name.
    * @return The form field name for the given binary attachment.
    */
-  protected String createFormFieldName(BinaryAttachment binaryAttachment) {
-
-    if (binaryAttachment.getFieldName() != null) {
-      return binaryAttachment.getFieldName();
-    }
-
-    String name = binaryAttachment.getFilename();
-    return Optional.ofNullable(name).filter(f -> f.contains(".")).map(f -> f.substring(0, f.lastIndexOf('.')))
-      .orElse(name);
-  }
-
   /**
    * returns if the binary attachment stream is closed automatically
    * 
@@ -504,74 +480,6 @@ public class DefaultWebRequestor implements WebRequestor {
 
     void apply(Map<String, List<String>> headers, DebugHeaderInfo.DebugHeaderInfoFactory factory) {
       consumer.accept(factory, StringUtils.trimToEmpty(getHeaderValue(headers, headerName)));
-    }
-  }
-
-  private static final class TempFileBodyPublisher implements Closeable {
-
-    private final Path tempFile;
-    private final OutputStream outputStream;
-    private boolean closed;
-
-    TempFileBodyPublisher() throws IOException {
-      tempFile = Files.createTempFile("restfb-request", ".bin");
-      outputStream = Files.newOutputStream(tempFile, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
-    }
-
-    OutputStream outputStream() {
-      return outputStream;
-    }
-
-    BodyPublisher build() throws IOException {
-      outputStream.flush();
-      outputStream.close();
-      closed = true;
-      return BodyPublishers.ofFile(tempFile);
-    }
-
-    @Override
-    public void close() throws IOException {
-      if (!closed) {
-        outputStream.close();
-        closed = true;
-      }
-      Files.deleteIfExists(tempFile);
-    }
-  }
-
-  private class MultipartFormBodyPublisher implements Closeable {
-
-    private final TempFileBodyPublisher tempFileBodyPublisher;
-    private final OutputStream outputStream;
-
-    MultipartFormBodyPublisher() throws IOException {
-      tempFileBodyPublisher = new TempFileBodyPublisher();
-      outputStream = tempFileBodyPublisher.outputStream();
-    }
-
-    void addBinaryAttachment(BinaryAttachment attachment) throws IOException {
-
-      String formData = MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE
-          + "Content-Disposition: form-data; name=\"" + createFormFieldName(attachment) + "\"; filename=\""
-          + attachment.getFilename() + "\"" + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + "Content-Type: "
-          + attachment.getContentType() + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE;
-
-      outputStream.write(formData.getBytes(StringUtils.ENCODING_CHARSET));
-      write(attachment.getData(), outputStream, MULTIPART_DEFAULT_BUFFER_SIZE);
-      outputStream.write((MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY
-          + MULTIPART_TWO_HYPHENS + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE)
-        .getBytes(StringUtils.ENCODING_CHARSET));
-    }
-
-    BodyPublisher build() throws IOException {
-      outputStream.flush();
-      outputStream.close();
-      return tempFileBodyPublisher.build();
-    }
-
-    @Override
-    public void close() throws IOException {
-      tempFileBodyPublisher.close();
     }
   }
 

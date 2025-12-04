@@ -438,4 +438,23 @@ public class BinaryAttachment {
   public boolean hasBinaryData() {
     return data != null;
   }
+
+  /**
+   * Returns the form field name used for multipart uploads.
+   *
+   * @return the explicit field name if set, otherwise the filename without its extension
+   */
+  public String getFormFieldName() {
+    if (fieldName != null) {
+      return fieldName;
+    }
+
+    String name = getFilename();
+    if (name == null) {
+      return null;
+    }
+
+    int dotIndex = name.lastIndexOf('.');
+    return dotIndex > 0 ? name.substring(0, dotIndex) : name;
+  }
 }
