@@ -284,13 +284,15 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     if (!isBlank(accessToken) && !isBlank(appSecret)) {
       if (isAppSecretProofWithTime()) {
         long now = System.currentTimeMillis() / 1000;
-        WebRequestor.Request request = new WebRequestor.Request(String.format("%s&%s=%s&%s=%s", connectionPageUrl,
-                urlEncode(APP_SECRET_PROOF_TIME_PARAM_NAME), now,
-                urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken + "|" + now, appSecret)), null);
+        WebRequestor.Request request =
+            new WebRequestor.Request(
+              String.format("%s&%s=%s&%s=%s", connectionPageUrl, urlEncode(APP_SECRET_PROOF_TIME_PARAM_NAME), now,
+                urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken + "|" + now, appSecret)),
+              null);
         connectionJson = makeRequestAndProcessResponse(() -> webRequestor.executeGet(request));
       } else {
         WebRequestor.Request request = new WebRequestor.Request(String.format("%s&%s=%s", connectionPageUrl,
-                urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken, appSecret)), null);
+          urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken, appSecret)), null);
         connectionJson = makeRequestAndProcessResponse(() -> webRequestor.executeGet(request));
       }
     } else {
@@ -645,7 +647,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
   @Override
   public String getBusinessLoginDialogUrl(String appId, String redirectUri, String configId, String state,
-                                          Parameter... parameters) {
+      Parameter... parameters) {
     verifyParameterPresence("configId", configId);
 
     List<Parameter> parameterList = new ArrayList<>(asList(parameters));
@@ -654,7 +656,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     parameterList.add(Parameter.with("override_default_response_type", true));
 
     return getGenericLoginDialogUrl(appId, redirectUri, new ScopeBuilder(true),
-            () -> getFacebookEndpointUrls().getFacebookEndpoint() + "/dialog/oauth", state, parameterList);
+      () -> getFacebookEndpointUrls().getFacebookEndpoint() + "/dialog/oauth", state, parameterList);
   }
 
   protected String getGenericLoginDialogUrl(String appId, String redirectUri, ScopeBuilder scope,
@@ -880,6 +882,14 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     // Perform a GET or POST to the API endpoint
     try {
       response = requestor.makeRequest();
+    } catch (IOException ioe) {
+      if (ioe.getMessage() != null && ioe.getMessage().contains("RST_STREAM")) {
+        throw new FacebookRstStreamNetworkException(ioe.getMessage(), ioe);
+      }
+      if (ioe.getMessage() != null && ioe.getMessage().contains("GOAWAY")) {
+        throw new FacebookGoawayNetworkException(ioe.getMessage(), ioe);
+      }
+      throw new FacebookNetworkException(ioe);
     } catch (Exception t) {
       throw new FacebookNetworkException(t);
     }
@@ -947,12 +957,13 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       if (isAppSecretProofWithTime()) {
         long now = System.currentTimeMillis() / 1000;
         parameters = parametersWithAdditionalParameter(
-                Parameter.with(APP_SECRET_PROOF_TIME_PARAM_NAME, String.valueOf(now)), parameters);
+          Parameter.with(APP_SECRET_PROOF_TIME_PARAM_NAME, String.valueOf(now)), parameters);
         parameters = parametersWithAdditionalParameter(
-                Parameter.with(APP_SECRET_PROOF_PARAM_NAME, obtainAppSecretProof(accessToken + "|" + now, appSecret)), parameters);
+          Parameter.with(APP_SECRET_PROOF_PARAM_NAME, obtainAppSecretProof(accessToken + "|" + now, appSecret)),
+          parameters);
       } else {
         parameters = parametersWithAdditionalParameter(
-                Parameter.with(APP_SECRET_PROOF_PARAM_NAME, obtainAppSecretProof(accessToken, appSecret)), parameters);
+          Parameter.with(APP_SECRET_PROOF_PARAM_NAME, obtainAppSecretProof(accessToken, appSecret)), parameters);
       }
     }
 

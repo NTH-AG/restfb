@@ -21,36 +21,14 @@
  */
 package com.restfb.exception;
 
-import static java.lang.String.format;
-
 /**
- * Indicates that a network error occurred while trying to connect to the Facebook API endpoint.
+ * Indicates that the remote server reset the HTTP/2 stream (RST_STREAM).
  */
-public class FacebookNetworkException extends FacebookException {
+public class FacebookRstStreamNetworkException extends FacebookNetworkException {
 
-  private final Integer httpStatusCode;
   private static final long serialVersionUID = 1L;
-  private static final String MESSAGE = "Facebook request failed";
 
-  public FacebookNetworkException(Throwable cause) {
-    this(MESSAGE, cause, null);
-  }
-
-  public FacebookNetworkException(Integer httpStatusCode) {
-    this(MESSAGE, null, httpStatusCode);
-  }
-
-  public FacebookNetworkException(Throwable cause, Integer httpStatusCode) {
-    this(MESSAGE, cause, httpStatusCode);
-  }
-
-  protected FacebookNetworkException(String message, Throwable cause, Integer httpStatusCode) {
-    super(format("A network error occurred while trying to communicate with Facebook: %s%s", message,
-      httpStatusCode != null ? format(" (HTTP status code %d)", httpStatusCode) : ""), cause);
-    this.httpStatusCode = httpStatusCode;
-  }
-
-  public Integer getHttpStatusCode() {
-    return httpStatusCode;
+  public FacebookRstStreamNetworkException(String message, Throwable cause) {
+    super(message, cause, null);
   }
 }

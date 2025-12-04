@@ -21,36 +21,17 @@
  */
 package com.restfb.exception;
 
-import static java.lang.String.format;
-
 /**
- * Indicates that a network error occurred while trying to connect to the Facebook API endpoint.
+ * Indicates that the remote server sent a GOAWAY frame and is closing the HTTP/2 connection. This means the server will
+ * not accept any new streams on this connection. Existing streams with an ID lower than or equal to the last processed
+ * stream ID may have been processed, while streams with a higher ID have been rejected and will not be executed. The
+ * GOAWAY frame may include an HTTP/2 error code describing the reason for the shutdown.
  */
-public class FacebookNetworkException extends FacebookException {
+public class FacebookGoawayNetworkException extends FacebookNetworkException {
 
-  private final Integer httpStatusCode;
   private static final long serialVersionUID = 1L;
-  private static final String MESSAGE = "Facebook request failed";
 
-  public FacebookNetworkException(Throwable cause) {
-    this(MESSAGE, cause, null);
-  }
-
-  public FacebookNetworkException(Integer httpStatusCode) {
-    this(MESSAGE, null, httpStatusCode);
-  }
-
-  public FacebookNetworkException(Throwable cause, Integer httpStatusCode) {
-    this(MESSAGE, cause, httpStatusCode);
-  }
-
-  protected FacebookNetworkException(String message, Throwable cause, Integer httpStatusCode) {
-    super(format("A network error occurred while trying to communicate with Facebook: %s%s", message,
-      httpStatusCode != null ? format(" (HTTP status code %d)", httpStatusCode) : ""), cause);
-    this.httpStatusCode = httpStatusCode;
-  }
-
-  public Integer getHttpStatusCode() {
-    return httpStatusCode;
+  public FacebookGoawayNetworkException(String message, Throwable cause) {
+    super(message, cause, null);
   }
 }
