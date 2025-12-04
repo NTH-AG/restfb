@@ -175,7 +175,7 @@ public class DefaultWebRequestor implements WebRequestor {
 
     logRequestAndAttachmentOnDebug(request, binaryAttachments);
 
-    TempFileBodyPublisher bodyPublisher = null;
+    MultipartFormBodyPublisher multipartBodyPublisher = null;
 
     try {
       String url = buildPostUrl(request, binaryAttachments);
@@ -184,41 +184,32 @@ public class DefaultWebRequestor implements WebRequestor {
 
       initHeaderAccessToken(builder, request);
 
-      if (!binaryAttachments.isEmpty()) {
-        setMultipartRequestProperties(builder);
-      } else if (request.hasBody()) {
-        setJsonRequestProperties(builder);
-      } else {
-        setFormUrlEncodedRequestProperties(builder);
-      }
-
-      customizeRequest(builder, request, HttpMethod.POST);
-
       BodyPublisher publisher;
       if (!binaryAttachments.isEmpty()) {
-        bodyPublisher = new TempFileBodyPublisher();
-        try (OutputStream outputStream = bodyPublisher.outputStream()) {
-          writeBinaryAttachments(binaryAttachments, outputStream);
+        setMultipartRequestProperties(builder);
+        multipartBodyPublisher = new MultipartFormBodyPublisher();
+        for (BinaryAttachment attachment : binaryAttachments) {
+          multipartBodyPublisher.addBinaryAttachment(attachment);
         }
-        publisher = bodyPublisher.build();
+        publisher = multipartBodyPublisher.build();
       } else {
+        if (request.hasBody()) {
+          setJsonRequestProperties(builder);
+        } else {
+          setFormUrlEncodedRequestProperties(builder);
+        }
         String payload =
             request.hasBody() ? request.getBody().getData() : Optional.ofNullable(request.getParameters()).orElse("");
         publisher = BodyPublishers.ofString(payload, StringUtils.ENCODING_CHARSET);
       }
 
+      customizeRequest(builder, request, HttpMethod.POST);
+
       HttpRequest httpRequest = builder.POST(publisher).build();
       return sendRequest(httpRequest);
     } finally {
       closeAttachmentsOnAutoClose(binaryAttachments);
-      closeQuietly(bodyPublisher);
-    }
-  }
-
-  private void writeBinaryAttachments(List<BinaryAttachment> binaryAttachments, OutputStream outputStream)
-      throws IOException {
-    for (BinaryAttachment binaryAttachment : binaryAttachments) {
-      writeBinaryAttachmentToOutputStream(binaryAttachment, outputStream);
+      closeQuietly(multipartBodyPublisher);
     }
   }
 
@@ -239,24 +230,6 @@ public class DefaultWebRequestor implements WebRequestor {
         + ((!binaryAttachments.isEmpty() || request.hasBody()) ? "?" + request.getParameters() : "");
   }
 
-  private void writeBinaryAttachmentToOutputStream(BinaryAttachment binaryAttachment, OutputStream outputStream)
-      throws IOException {
-    StringBuilder formData = createBinaryAttachmentFormData(binaryAttachment);
-    outputStream.write(formData.toString().getBytes(StringUtils.ENCODING_CHARSET));
-    write(binaryAttachment.getData(), outputStream, MULTIPART_DEFAULT_BUFFER_SIZE);
-    outputStream.write((MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY
-        + MULTIPART_TWO_HYPHENS + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE)
-      .getBytes(StringUtils.ENCODING_CHARSET));
-  }
-
-  private static void writeRequestToOutputStream(Request request, OutputStream outputStream) throws IOException {
-    if (request.hasBody()) {
-      outputStream.write(request.getBody().getData().getBytes(StringUtils.ENCODING_CHARSET));
-    } else {
-      outputStream.write(request.getParameters().getBytes(StringUtils.ENCODING_CHARSET));
-    }
-  }
-
   private static void logRequestAndAttachmentOnDebug(Request request, List<BinaryAttachment> binaryAttachments) {
     if (HTTP_LOGGER.isDebugEnabled()) {
       HTTP_LOGGER.debug("Executing a POST to " + request.getUrl() + " with parameters "
@@ -264,19 +237,6 @@ public class DefaultWebRequestor implements WebRequestor {
           + UrlUtils.urlDecode(request.getParameters())
           + (!binaryAttachments.isEmpty() ? " and " + binaryAttachments.size() + " binary attachment[s]." : ""));
     }
-  }
-
-  private StringBuilder createBinaryAttachmentFormData(BinaryAttachment binaryAttachment) {
-    StringBuilder stringBuilder = new StringBuilder();
-    stringBuilder.append(MULTIPART_TWO_HYPHENS).append(MULTIPART_BOUNDARY).append(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE)
-      .append("Content-Disposition: form-data; name=\"").append(createFormFieldName(binaryAttachment))
-      .append("\"; filename=\"").append(binaryAttachment.getFilename()).append("\"");
-
-    stringBuilder.append(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE).append("Content-Type: ")
-      .append(binaryAttachment.getContentType());
-
-    stringBuilder.append(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE).append(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE);
-    return stringBuilder;
   }
 
   private void closeAttachmentsOnAutoClose(List<BinaryAttachment> binaryAttachments) {
@@ -458,14 +418,14 @@ public class DefaultWebRequestor implements WebRequestor {
     customizeRequest(builder, request, httpMethod);
 
     switch (httpMethod) {
-        case GET:
-          builder.GET();
-          break;
-        case DELETE:
-          builder.DELETE();
-          break;
-        default:
-          throw new IllegalArgumentException("Unsupported httpMethod used");
+    case GET:
+      builder.GET();
+      break;
+    case DELETE:
+      builder.DELETE();
+      break;
+    default:
+      throw new IllegalArgumentException("Unsupported httpMethod used");
     }
 
     HttpRequest httpRequest = builder.build();
@@ -576,6 +536,42 @@ public class DefaultWebRequestor implements WebRequestor {
         closed = true;
       }
       Files.deleteIfExists(tempFile);
+    }
+  }
+
+  private class MultipartFormBodyPublisher implements Closeable {
+
+    private final TempFileBodyPublisher tempFileBodyPublisher;
+    private final OutputStream outputStream;
+
+    MultipartFormBodyPublisher() throws IOException {
+      tempFileBodyPublisher = new TempFileBodyPublisher();
+      outputStream = tempFileBodyPublisher.outputStream();
+    }
+
+    void addBinaryAttachment(BinaryAttachment attachment) throws IOException {
+
+      String formData = MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE
+          + "Content-Disposition: form-data; name=\"" + createFormFieldName(attachment) + "\"; filename=\""
+          + attachment.getFilename() + "\"" + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + "Content-Type: "
+          + attachment.getContentType() + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE;
+
+      outputStream.write(formData.getBytes(StringUtils.ENCODING_CHARSET));
+      write(attachment.getData(), outputStream, MULTIPART_DEFAULT_BUFFER_SIZE);
+      outputStream.write((MULTIPART_CARRIAGE_RETURN_AND_NEWLINE + MULTIPART_TWO_HYPHENS + MULTIPART_BOUNDARY
+          + MULTIPART_TWO_HYPHENS + MULTIPART_CARRIAGE_RETURN_AND_NEWLINE)
+        .getBytes(StringUtils.ENCODING_CHARSET));
+    }
+
+    BodyPublisher build() throws IOException {
+      outputStream.flush();
+      outputStream.close();
+      return tempFileBodyPublisher.build();
+    }
+
+    @Override
+    public void close() throws IOException {
+      tempFileBodyPublisher.close();
     }
   }
 

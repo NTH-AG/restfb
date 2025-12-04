@@ -30,27 +30,33 @@ import org.junit.jupiter.api.Assumptions;
  */
 public class RestFbIntegrationTestSettings {
 
-  private boolean writeToFacebook;
+  private final boolean writeToFacebook;
 
-  private String userAccessToken;
+  private final String userAccessToken;
 
-  private String userId;
+  private final String userId;
 
-  private String pageAccessToken;
+  private final String pageAccessToken;
 
-  private String pageId;
+  private final String pageId;
 
-  private String userGroupId;
+  private final String userGroupId;
 
-  private String appSecret;
+  private final String appSecret;
 
-  private String appId;
+  private final String appId;
 
-  private String appAccessToken;
+  private final String appAccessToken;
 
-  private String recipientId;
+  private final String recipientId;
 
-  private String pageAlbumId;
+  private final String pageAlbumId;
+
+  private final String threadsAccessToken;
+
+  private final String threadsClientSecret;
+
+  private final String threadsProfileId;
 
   RestFbIntegrationTestSettings(Properties settings) {
     writeToFacebook = Boolean.parseBoolean(settings.getProperty("writeToFacebook", "false"));
@@ -64,6 +70,9 @@ public class RestFbIntegrationTestSettings {
     appId = settings.getProperty("app.id", "");
     recipientId = settings.getProperty("messenger.recipient", "");
     pageAlbumId = settings.getProperty("page.album.id", "");
+    threadsAccessToken = settings.getProperty("threads.accessToken", "");
+    threadsClientSecret = settings.getProperty("threads.clientSecret", "");
+    threadsProfileId = settings.getProperty("threads.profileId", "");
   }
 
   public boolean writeAccessAllowed() {
@@ -118,5 +127,20 @@ public class RestFbIntegrationTestSettings {
   public String getAppAccessToken() {
     Assumptions.assumeFalse(appAccessToken.isEmpty());
     return appAccessToken;
+  }
+
+  public String getThreadsAccessToken() {
+    Assumptions.assumeFalse(threadsAccessToken.isEmpty());
+    return threadsAccessToken;
+  }
+
+  public String getThreadsClientSecret() {
+    Assumptions.assumeFalse(threadsClientSecret.isEmpty());
+    return threadsClientSecret;
+  }
+
+  public String getThreadsProfileId() {
+    Assumptions.assumeFalse(threadsProfileId.isEmpty());
+    return threadsProfileId;
   }
 }

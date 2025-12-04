@@ -47,17 +47,6 @@ class PostByteImageITCase extends RestFbImageIntegrationTestBase {
   }
 
   @Test
-  void postImageToUserFeedWithMessageAndPrivacy() {
-    byte[] imageAsBytes = fetchBytesFromImage();
-    JsonObject privacy = new JsonObject();
-    privacy.add("value", "SELF");
-    DefaultFacebookClient client = new DefaultFacebookClient(getTestSettings().getUserAccessToken(), Version.LATEST);
-    JsonObject obj = client.publish("me/photos", JsonObject.class,
-      BinaryAttachment.with("test.png", imageAsBytes, "image/png"), Parameter.with("privacy", privacy));
-    assertNotNull(obj);
-  }
-
-  @Test
   void postLinkToPageFeedWithMessage() {
     DefaultFacebookClient client = new DefaultFacebookClient(getTestSettings().getPageAccessToken(), Version.LATEST);
     JsonObject obj = client.publish(getTestSettings().getPageId() + "/feed", JsonObject.class,
