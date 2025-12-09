@@ -70,7 +70,9 @@ public class MultipartFormBodyPublisher implements Closeable {
       .append(new String(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE, StandardCharsets.UTF_8));
 
     outputStream.write(headers.toString().getBytes(StringUtils.ENCODING_CHARSET));
-    write(attachment.getData(), outputStream);
+    try (InputStream data = attachment.getData()) {
+      write(data, outputStream);
+    }
     outputStream.write((new String(MULTIPART_CARRIAGE_RETURN_AND_NEWLINE, StandardCharsets.UTF_8)
         + new String(MULTIPART_TWO_HYPHENS, StandardCharsets.UTF_8) + boundary
         + new String(MULTIPART_TWO_HYPHENS, StandardCharsets.UTF_8)
