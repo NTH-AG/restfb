@@ -32,7 +32,9 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -83,8 +85,11 @@ class FacebookClientTest {
    */
   @Test
   void oauthExceptionWithErrorCode() {
+    DebugHeaderInfo debugHeaderInfo =
+        DebugHeaderInfo.DebugHeaderInfoFactory.create().setTraceId("trace-id").build();
     FacebookClient facebookClient = facebookClientWithResponse(new Response(403,
-      "{\"error\":{\"message\":\"(#210) User not visible\",\"type\":\"OAuthException\",\"code\":210}}"));
+      "{\"error\":{\"message\":\"(#210) User not visible\",\"type\":\"OAuthException\",\"code\":210}}",
+      debugHeaderInfo));
 
     try {
       facebookClient.fetchObject("me", User.class);
@@ -93,6 +98,7 @@ class FacebookClientTest {
       assertThat(e.getErrorMessage()).isEqualTo("(#210) User not visible");
       assertThat(e.getErrorType()).isEqualTo("OAuthException");
       assertThat(e.getErrorCode()).isEqualTo(210);
+      assertThat(e.getDebugHeaderInfo()).isSameAs(debugHeaderInfo);
     }
   }
 
@@ -131,6 +137,36 @@ class FacebookClientTest {
       assertThat(e.getErrorType()).isEqualTo("OAuthException");
       assertThat(e.getErrorCode()).isNull();
     }
+  }
+
+  @Test
+  void debugHeaderInfoConsumerReceivesInfo() {
+    DebugHeaderInfo debugHeaderInfo = DebugHeaderInfo.DebugHeaderInfoFactory.create().setTraceId("trace").build();
+    DefaultFacebookClient facebookClient =
+        (DefaultFacebookClient) facebookClientWithResponse(new Response(200, "{\"id\":\"1\"}", debugHeaderInfo));
+    final DebugHeaderInfo[] consumed = new DebugHeaderInfo[1];
+    facebookClient.setDebugHeaderInfoConsumer(info -> consumed[0] = info);
+
+    facebookClient.fetchObject("me", User.class);
+
+    assertThat(facebookClient.getLastDebugHeaderInfo()).isSameAs(debugHeaderInfo);
+    assertThat(consumed[0]).isSameAs(debugHeaderInfo);
+  }
+
+  @Test
+  void responseHeaderConsumerReceivesInfo() {
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put("facebook-api-version", Collections.singletonList("v25.0"));
+    DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
+      new Response(200, "{\"id\":\"1\"}", null, headers));
+
+    final Map<String, List<String>>[] consumed = new Map[1];
+    facebookClient.setResponseHeaderConsumer(map -> consumed[0] = map);
+
+    facebookClient.fetchObject("me", User.class);
+
+    assertThat(facebookClient.getLastResponseHeaders()).isEqualTo(headers);
+    assertThat(consumed[0]).isEqualTo(headers);
   }
 
   @Test

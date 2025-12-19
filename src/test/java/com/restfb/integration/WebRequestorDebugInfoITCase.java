@@ -36,9 +36,7 @@ class WebRequestorDebugInfoITCase extends RestFbIntegrationTestBase {
     FacebookClient client = new DefaultFacebookClient(getTestSettings().getUserAccessToken(), Version.LATEST);
     client.fetchObject("/me", User.class, Parameter.with("fields", "id,name"));
 
-    WebRequestor wr = client.getWebRequestor();
-
-    DebugHeaderInfo info = wr.getDebugHeaderInfo();
+    DebugHeaderInfo info = client.getLastDebugHeaderInfo();
     assertNotNull(info);
     assertNotNull(info.getDebug());
     assertNotNull(info.getRev());

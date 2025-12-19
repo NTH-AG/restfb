@@ -34,6 +34,7 @@ import static java.util.Collections.emptyList;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -112,6 +113,12 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
   protected boolean httpDeleteFallback;
 
   protected boolean accessTokenInHeader;
+
+  private Consumer<DebugHeaderInfo> debugHeaderInfoConsumer;
+  private Consumer<Map<String, List<String>>> responseHeaderConsumer;
+
+  private DebugHeaderInfo lastDebugHeaderInfo;
+  private Map<String, List<String>> lastResponseHeaders;
 
   protected DefaultFacebookClient() {
     this(Version.LATEST);
@@ -872,6 +879,43 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     this.httpDeleteFallback = httpDeleteFallback;
   }
 
+  @Override
+  public void setDebugHeaderInfoConsumer(Consumer<DebugHeaderInfo> debugHeaderInfoConsumer) {
+    this.debugHeaderInfoConsumer = debugHeaderInfoConsumer;
+  }
+
+  @Override
+  @Deprecated
+  public DebugHeaderInfo getLastDebugHeaderInfo() {
+    return lastDebugHeaderInfo;
+  }
+
+  @Override
+  public void setResponseHeaderConsumer(Consumer<Map<String, List<String>>> responseHeaderConsumer) {
+    this.responseHeaderConsumer = responseHeaderConsumer;
+  }
+
+  @Override
+  @Deprecated
+  public Map<String, List<String>> getLastResponseHeaders() {
+    return lastResponseHeaders;
+  }
+
+  protected void processResponseMetadata(Response response) {
+    DebugHeaderInfo debugHeaderInfo = Optional.ofNullable(response).map(Response::getDebugHeaderInfo).orElse(null);
+    Map<String, List<String>> headers = Optional.ofNullable(response).map(Response::getHeaders).orElse(null);
+
+    lastDebugHeaderInfo = debugHeaderInfo;
+    lastResponseHeaders = headers;
+
+    if (debugHeaderInfo != null && debugHeaderInfoConsumer != null) {
+      debugHeaderInfoConsumer.accept(debugHeaderInfo);
+    }
+    if (headers != null && responseHeaderConsumer != null) {
+      responseHeaderConsumer.accept(headers);
+    }
+  }
+
   protected interface Requestor {
     Response makeRequest() throws IOException;
   }
@@ -894,6 +938,8 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       throw new FacebookNetworkException(t);
     }
 
+    processResponseMetadata(response);
+
     // If we get any HTTP response code other than a 200 OK or 400 Bad Request
     // or 401 Not Authorized or 403 Forbidden or 404 Not Found or 500 Internal
     // Server Error or 302 Not Modified
@@ -911,7 +957,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       // If the response contained an error code, throw an exception.
       getFacebookExceptionGenerator().throwFacebookResponseStatusExceptionIfNecessary(json, response.getStatusCode());
     } catch (FacebookErrorMessageException feme) {
-      Optional.ofNullable(getWebRequestor()).map(WebRequestor::getDebugHeaderInfo).ifPresent(feme::setDebugHeaderInfo);
+      Optional.ofNullable(response).map(Response::getDebugHeaderInfo).ifPresent(feme::setDebugHeaderInfo);
       throw feme;
     }
 

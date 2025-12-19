@@ -40,7 +40,6 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.util.*;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 
 import com.restfb.request.MultipartFormBodyPublisher;
 import com.restfb.request.TempFileBodyPublisher;
@@ -73,10 +72,6 @@ public class DefaultWebRequestor implements WebRequestor {
   private static final int DEFAULT_READ_TIMEOUT_IN_MS = 180000;
 
   public static final String HEADER_CONTENT_TYPE = "Content-Type";
-
-  private Map<String, List<String>> currentHeaders;
-
-  private DebugHeaderInfo debugHeaderInfo;
 
   /**
    * By default, this is true, to prevent breaking existing usage
@@ -364,23 +359,9 @@ public class DefaultWebRequestor implements WebRequestor {
     this.autocloseBinaryAttachmentStream = autocloseBinaryAttachmentStream;
   }
 
-  /**
-   * access to the current response headers
-   * 
-   * @return the current reponse header map
-   */
-  public Map<String, List<String>> getCurrentHeaders() {
-    return currentHeaders;
-  }
-
   @Override
   public Response executeDelete(Request request) throws IOException {
     return execute(HttpMethod.DELETE, request);
-  }
-
-  @Override
-  public DebugHeaderInfo getDebugHeaderInfo() {
-    return debugHeaderInfo;
   }
 
   private Response execute(HttpMethod httpMethod, Request request) throws IOException {
@@ -411,32 +392,18 @@ public class DefaultWebRequestor implements WebRequestor {
   private Response sendRequest(HttpRequest httpRequest) throws IOException {
     try {
       HttpResponse<byte[]> httpResponse = getHttpClient().send(httpRequest, BodyHandlers.ofByteArray());
-      HTTP_LOGGER.trace("Response headers: {}", httpResponse.headers().map());
-      fillHeaderAndDebugInfo(httpResponse);
-      return createResponse(httpResponse);
+      Map<String, List<String>> headers = Collections.unmodifiableMap(toHeaderMap(httpResponse.headers()));
+      HTTP_LOGGER.trace("Response headers: {}", headers);
+      return createResponse(httpResponse, headers);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IOException("Interrupted while making request", e);
     }
   }
 
-  protected void fillHeaderAndDebugInfo(HttpResponse<byte[]> httpResponse) {
-    currentHeaders = Collections.unmodifiableMap(toHeaderMap(httpResponse.headers()));
-
-    String usedApiVersion = StringUtils.trimToEmpty(getHeaderValue(currentHeaders, "facebook-api-version"));
-    HTTP_LOGGER.debug("Facebook used the API {} to answer your request", usedApiVersion);
-
-    Version usedVersion = Version.getVersionFromString(usedApiVersion);
-    DebugHeaderInfo.DebugHeaderInfoFactory factory =
-        DebugHeaderInfo.DebugHeaderInfoFactory.create().setVersion(usedVersion);
-
-    Arrays.stream(FbHeaderField.values()).forEach(f -> f.apply(currentHeaders, factory));
-    debugHeaderInfo = factory.build();
-  }
-
-  protected Response createResponse(HttpResponse<byte[]> httpResponse) {
+  protected Response createResponse(HttpResponse<byte[]> httpResponse, Map<String, List<String>> headers) {
     byte[] body = Optional.ofNullable(httpResponse.body()).orElse(new byte[0]);
-    Response response = new Response(httpResponse.statusCode(), StringUtils.toString(body));
+    Response response = new Response(httpResponse.statusCode(), StringUtils.toString(body), null, headers);
     HTTP_LOGGER.debug("Facebook responded with {}", response);
     return response;
   }
@@ -445,42 +412,6 @@ public class DefaultWebRequestor implements WebRequestor {
     Map<String, List<String>> result = new LinkedHashMap<>();
     headers.map().forEach((k, v) -> result.put(k, Collections.unmodifiableList(v)));
     return result;
-  }
-
-  private static String getHeaderValue(Map<String, List<String>> headers, String fieldName) {
-    for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-      if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(fieldName)) {
-        List<String> values = entry.getValue();
-        if (values.isEmpty()) {
-          return "";
-        }
-        return values.get(0);
-      }
-    }
-    return "";
-  }
-
-  private enum FbHeaderField {
-    X_FB_TRACE_ID("x-fb-trace-id", DebugHeaderInfo.DebugHeaderInfoFactory::setTraceId), //
-    X_FB_REV("x-fb-rev", DebugHeaderInfo.DebugHeaderInfoFactory::setRev), //
-    X_FB_DEBUG("x-fb-debug", DebugHeaderInfo.DebugHeaderInfoFactory::setDebug), //
-    X_APP_USAGE("x-app-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setAppUsage), //
-    X_PAGE_USAGE("x-page-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setPageUsage), //
-    X_AD_ACCOUNT_USAGE("x-ad-account-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setAdAccountUsage), //
-    X_BUSINESS_USE_CASE_USAGE("x-business-use-case-usage",
-        DebugHeaderInfo.DebugHeaderInfoFactory::setBusinessUseCaseUsage);
-
-    private final String headerName;
-    private final BiConsumer<DebugHeaderInfo.DebugHeaderInfoFactory, String> consumer;
-
-    FbHeaderField(String headerName, BiConsumer<DebugHeaderInfo.DebugHeaderInfoFactory, String> consumer) {
-      this.headerName = headerName;
-      this.consumer = consumer;
-    }
-
-    void apply(Map<String, List<String>> headers, DebugHeaderInfo.DebugHeaderInfoFactory factory) {
-      consumer.accept(factory, StringUtils.trimToEmpty(getHeaderValue(headers, headerName)));
-    }
   }
 
 }

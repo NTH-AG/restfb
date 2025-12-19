@@ -26,6 +26,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -78,21 +79,21 @@ public class ETagWebRequestor extends DefaultWebRequestor {
   }
 
   @Override
-  protected Response createResponse(HttpResponse<byte[]> httpResponse) {
+  protected Response createResponse(HttpResponse<byte[]> httpResponse, Map<String, List<String>> headers) {
     try {
       if (HttpMethod.GET.name().equals(httpResponse.request().method())) {
         if (httpResponse.statusCode() == HTTP_NOT_MODIFIED && currentETagRespThreadLocal.get() != null) {
           ETagResponse etagResp = currentETagRespThreadLocal.get();
-          return new Response(httpResponse.statusCode(), etagResp.getBody());
+          return new Response(httpResponse.statusCode(), etagResp.getBody(), null, headers);
         } else {
-          Response resp = super.createResponse(httpResponse);
+          Response resp = super.createResponse(httpResponse, headers);
           String fullUrl = httpResponse.request().uri().toString();
           httpResponse.headers().firstValue("ETag").ifPresent(etag ->
             etagCache.put(fullUrl, new ETagResponse(etag, resp.getBody())));
           return resp;
         }
       } else {
-        return super.createResponse(httpResponse);
+        return super.createResponse(httpResponse, headers);
       }
     } finally {
       currentETagRespThreadLocal.remove();

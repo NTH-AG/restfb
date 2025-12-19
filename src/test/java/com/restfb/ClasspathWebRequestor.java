@@ -73,8 +73,4 @@ public class ClasspathWebRequestor implements WebRequestor {
     return response;
   }
 
-  @Override
-  public DebugHeaderInfo getDebugHeaderInfo() {
-    return null;
-  }
 }

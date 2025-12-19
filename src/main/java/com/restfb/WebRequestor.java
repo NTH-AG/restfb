@@ -27,8 +27,13 @@ import static java.lang.String.format;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 import com.restfb.types.FacebookReelAttachment;
 import com.restfb.util.StringUtils;
@@ -56,6 +61,13 @@ public interface WebRequestor {
     private final String body;
 
     /**
+     * HTTP headers returned by Facebook.
+     */
+    private final Map<String, List<String>> headers;
+
+    private final AtomicReference<Optional<DebugHeaderInfo>> debugHeaderInfoRef = new AtomicReference<>();
+
+    /**
      * Creates a response with the given HTTP status code and response body as text.
      * 
      * @param statusCode
@@ -64,8 +76,33 @@ public interface WebRequestor {
      *          The response body as text.
      */
     public Response(Integer statusCode, String body) {
+      this(statusCode, body, null, null);
+    }
+
+    /**
+     * Creates a response with the given HTTP status code, response body and debug header info.
+     *
+     * @param statusCode
+     *          The HTTP status code of the response.
+     * @param body
+     *          The response body as text.
+     * @param debugHeaderInfo
+     *          debug info parsed from the headers (may be {@code null})
+     */
+    public Response(Integer statusCode, String body, DebugHeaderInfo debugHeaderInfo) {
+      this(statusCode, body, debugHeaderInfo, null);
+    }
+
+    /**
+     * Creates a response with status, body, debug info and headers.
+     */
+    public Response(Integer statusCode, String body, DebugHeaderInfo debugHeaderInfo, Map<String, List<String>> headers) {
       this.statusCode = statusCode;
       this.body = trimToEmpty(body);
+      this.headers = headers == null ? null : Collections.unmodifiableMap(headers);
+      if (debugHeaderInfo != null) {
+        this.debugHeaderInfoRef.set(Optional.of(debugHeaderInfo));
+      }
     }
 
     /**
@@ -84,6 +121,87 @@ public interface WebRequestor {
      */
     public String getBody() {
       return body;
+    }
+
+    /**
+     * Gets the debug header information parsed from the response headers.
+     * 
+     * @return debug header information, may be {@code null}
+     */
+    public DebugHeaderInfo getDebugHeaderInfo() {
+      Optional<DebugHeaderInfo> cached = debugHeaderInfoRef.get();
+      if (cached != null) {
+        return cached.orElse(null);
+      }
+
+      if (headers == null || headers.isEmpty()) {
+        return null;
+      }
+
+      DebugHeaderInfo built = buildDebugHeaderInfo(headers);
+      Optional<DebugHeaderInfo> optional = Optional.ofNullable(built);
+      if (!debugHeaderInfoRef.compareAndSet(null, optional)) {
+        return debugHeaderInfoRef.get().orElse(null);
+      }
+      return optional.orElse(null);
+    }
+
+    /**
+     * Gets the HTTP headers returned by Facebook.
+     * 
+     * @return unmodifiable header map or {@code null}
+     */
+    public Map<String, List<String>> getHeaders() {
+      return headers;
+    }
+
+    private DebugHeaderInfo buildDebugHeaderInfo(Map<String, List<String>> responseHeaders) {
+      String usedApiVersion = StringUtils.trimToEmpty(getHeaderValue(responseHeaders, "facebook-api-version"));
+      Version usedVersion = Version.getVersionFromString(usedApiVersion);
+      DebugHeaderInfo.DebugHeaderInfoFactory factory =
+          DebugHeaderInfo.DebugHeaderInfoFactory.create().setVersion(usedVersion);
+
+      Arrays.stream(FbHeaderField.values()).forEach(f -> f.apply(responseHeaders, factory));
+      return factory.build();
+    }
+
+    private static String getHeaderValue(Map<String, List<String>> responseHeaders, String fieldName) {
+      if (responseHeaders == null) {
+        return "";
+      }
+      for (Map.Entry<String, List<String>> entry : responseHeaders.entrySet()) {
+        if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(fieldName)) {
+          List<String> values = entry.getValue();
+          if (values.isEmpty()) {
+            return "";
+          }
+          return values.get(0);
+        }
+      }
+      return "";
+    }
+
+    private enum FbHeaderField {
+      X_FB_TRACE_ID("x-fb-trace-id", DebugHeaderInfo.DebugHeaderInfoFactory::setTraceId), //
+      X_FB_REV("x-fb-rev", DebugHeaderInfo.DebugHeaderInfoFactory::setRev), //
+      X_FB_DEBUG("x-fb-debug", DebugHeaderInfo.DebugHeaderInfoFactory::setDebug), //
+      X_APP_USAGE("x-app-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setAppUsage), //
+      X_PAGE_USAGE("x-page-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setPageUsage), //
+      X_AD_ACCOUNT_USAGE("x-ad-account-usage", DebugHeaderInfo.DebugHeaderInfoFactory::setAdAccountUsage), //
+      X_BUSINESS_USE_CASE_USAGE("x-business-use-case-usage",
+          DebugHeaderInfo.DebugHeaderInfoFactory::setBusinessUseCaseUsage);
+
+      private final String headerName;
+      private final BiConsumer<DebugHeaderInfo.DebugHeaderInfoFactory, String> consumer;
+
+      FbHeaderField(String headerName, BiConsumer<DebugHeaderInfo.DebugHeaderInfoFactory, String> consumer) {
+        this.headerName = headerName;
+        this.consumer = consumer;
+      }
+
+      void apply(Map<String, List<String>> responseHeaders, DebugHeaderInfo.DebugHeaderInfoFactory factory) {
+        consumer.accept(factory, StringUtils.trimToEmpty(getHeaderValue(responseHeaders, headerName)));
+      }
     }
 
     /**
@@ -262,13 +380,4 @@ public interface WebRequestor {
    */
   Response executeDelete(Request request) throws IOException;
 
-  /**
-   * Provides access to the facebook header information.
-   * <p>
-   * The fields <code>x-fb-rev</code>, <code>x-fb-trace-id</code> and <code>x-fb-debug</code> are checked and returned
-   * in a single container of the type {@link DebugHeaderInfo}
-   * 
-   * @return container with the explained facebook debug header information
-   */
-  DebugHeaderInfo getDebugHeaderInfo();
 }

@@ -83,11 +83,6 @@ public class FakeWebRequestor implements WebRequestor {
     }
   }
 
-  @Override
-  public DebugHeaderInfo getDebugHeaderInfo() {
-    return null;
-  }
-
   /**
    * get the used HTTP Method.
    * 

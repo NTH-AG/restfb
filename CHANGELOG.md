@@ -1,5 +1,7 @@
 # RestFB Changelog
 
+## Unreleased
+
 ## 2025.15.0 (October 20, 2025)
 
 * Issue #1612: Missing `Connections` added to `Ad` object

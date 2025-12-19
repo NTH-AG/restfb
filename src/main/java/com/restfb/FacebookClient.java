@@ -22,6 +22,8 @@
 package com.restfb;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchResponse;
@@ -547,6 +549,52 @@ public interface FacebookClient {
    * @since 1.6.7
    */
   WebRequestor getWebRequestor();
+
+  /**
+   * Registers a consumer that can inspect the {@link DebugHeaderInfo} parsed from each response.
+   *
+   * @param consumer
+   *          consumer invoked with the parsed debug information; default implementation is a no-op
+   * @since 2025.16.0
+   */
+  default void setDebugHeaderInfoConsumer(Consumer<DebugHeaderInfo> consumer) {
+    // no-op default for clients that do not expose debug info
+  }
+
+  /**
+   * Returns the last parsed {@link DebugHeaderInfo}, if available.
+   *
+   * @return most recent debug header information or {@code null}
+   * @since 2025.16.0
+   * @deprecated Use {@link #setDebugHeaderInfoConsumer(java.util.function.Consumer)} to observe debug headers instead
+   */
+  @Deprecated
+  default DebugHeaderInfo getLastDebugHeaderInfo() {
+    return null;
+  }
+
+  /**
+   * Registers a consumer that observes all response headers.
+   * 
+   * @param consumer
+   *          consumer receiving the unmodifiable header map; default implementation is a no-op
+   * @since 2025.16.0
+   */
+  default void setResponseHeaderConsumer(Consumer<Map<String, List<String>>> consumer) {
+    // no-op default for clients that do not expose header information
+  }
+
+  /**
+   * Returns the headers of the last response, if available.
+   * 
+   * @return most recent response headers or {@code null}
+   * @since 2025.16.0
+   * @deprecated Use {@link #setResponseHeaderConsumer(java.util.function.Consumer)} to inspect headers instead
+   */
+  @Deprecated
+  default Map<String, List<String>> getLastResponseHeaders() {
+    return null;
+  }
 
   /**
    * generates an logout url

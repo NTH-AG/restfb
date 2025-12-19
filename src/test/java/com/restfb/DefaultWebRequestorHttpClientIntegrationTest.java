@@ -76,7 +76,7 @@ class DefaultWebRequestorHttpClientIntegrationTest {
 
     assertThat(response.getStatusCode()).isEqualTo(200);
     assertThat(response.getBody()).isEqualTo("pong");
-    assertThat(requestor.getCurrentHeaders().get("facebook-api-version")).contains("v19.0");
+    assertThat(response.getHeaders().get("facebook-api-version")).contains("v19.0");
   }
 
   @Test
