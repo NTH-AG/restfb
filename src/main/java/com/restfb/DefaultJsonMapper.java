@@ -85,140 +85,184 @@ public class DefaultJsonMapper implements JsonMapper {
     json = trimToEmpty(json);
 
     checkJsonNotBlank(json);
+    JsonValue jsonValue;
+    try {
+      jsonValue = Json.parse(json);
+    } catch (ParseException e) {
+      throw new FacebookJsonMappingException(
+        "Unable to convert Facebook response JSON to a list of " + type.getName() + " instances. Offending JSON is '"
+            + json + "'.",
+        e);
+    }
 
-    if (StringJsonUtils.isObject(json)) {
-      // Sometimes Facebook returns the empty object {} when it really should be
-      // returning an empty list [] (example: do an FQL query for a user's
-      // affiliations - it's a list except when there are none, then it turns
-      // into an object). Check for that special case here.
-      if (StringJsonUtils.isEmptyObject(json)) {
+    return toJavaList(jsonValue, type, json);
+  }
+
+  private <T> List<T> toJavaList(JsonValue jsonValue, Class<T> type) {
+    return toJavaList(jsonValue, type, null);
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T> List<T> toJavaList(JsonValue jsonValue, Class<T> type, String rawJson) {
+    String sourceJson = rawJson != null ? rawJson : (jsonValue == null ? "null" : jsonValue.toString());
+    if (jsonValue != null && jsonValue.isObject()) {
+      JsonObject jsonObject = jsonValue.asObject();
+      if (jsonObject.isEmpty()) {
         MAPPER_LOGGER
           .trace("Encountered \\{} when we should've seen []. Mapping the \\{} as an empty list and moving on...");
-
         return new ArrayList<>();
       }
 
-      // Special case: if the only element of this object is an array called
-      // "data", then treat it as a list. The Graph API uses this convention for
-      // connections and in a few other places, e.g. comments on the Post
-      // object.
-      // Doing this simplifies mapping, so we don't have to worry about having a
-      // little placeholder object that only has a "data" value.
-      try {
-        JsonObject jsonObject = Json.parse(json).asObject();
-        List<String> fieldNames = jsonObject.names();
-
-        if (!fieldNames.isEmpty()) {
-          boolean hasSingleDataProperty = fieldNames.size() == 1;
-          Object jsonDataObject = jsonObject.get(fieldNames.get(0));
-
-          checkObjectIsMappedAsList(json, hasSingleDataProperty, jsonDataObject);
-
-          json = jsonDataObject.toString();
-        }
-      } catch (ParseException e) {
-        // Should never get here, but just in case...
-        throw new FacebookJsonMappingException("Unable to convert Facebook response JSON to a list of " + type.getName()
-            + " instances.  Offending JSON is '" + json + "'.",
-          e);
+      List<String> fieldNames = jsonObject.names();
+      if (!fieldNames.isEmpty()) {
+        boolean hasSingleDataProperty = fieldNames.size() == 1;
+        JsonValue jsonDataObject = jsonObject.get(fieldNames.get(0));
+        checkObjectIsMappedAsList(sourceJson, hasSingleDataProperty, jsonDataObject);
+        return toJavaList(jsonDataObject, type, jsonDataObject.toString());
       }
     }
 
     try {
-      JsonArray jsonArray = Json.parse(json).asArray();
+      JsonArray jsonArray = jsonValue.asArray();
       List<T> list = new ArrayList<>(jsonArray.size());
-      for (JsonValue jsonValue : jsonArray) {
-        if (jsonValue.isArray() && typeIsList(type)) {
-          T innerList = (T) convertRawValueToList(jsonValue, type);
+      int addedCount = 0;
+      for (JsonValue element : jsonArray) {
+        if (element.isArray() && typeIsList(type)) {
+          @SuppressWarnings("unchecked")
+          T innerList = (T) convertRawValueToList(element, type);
           list.add(innerList);
+          if (innerList != null || element.isNull()) {
+            addedCount++;
+          }
         } else {
-          String innerJson = jsonHelper.getStringFrom(jsonValue);
-          innerJson = convertArrayToStringIfNecessary(jsonValue, innerJson);
-          list.add(toJavaObject(innerJson, type));
+          T converted = toJavaObject(element, type);
+          list.add(converted);
+          if (converted != null || element.isNull()) {
+            addedCount++;
+          }
         }
+      }
+      if (addedCount == 0 && !jsonArray.isEmpty() && typeHasFacebookFields(type)) {
+        throw new FacebookJsonMappingException(
+          "Unable to convert Facebook response JSON to a list of " + type.getName() + " instances", null);
       }
       return unmodifiableList(list);
     } catch (FacebookJsonMappingException e) {
       throw e;
     } catch (Exception e) {
       throw new FacebookJsonMappingException(
-        "Unable to convert Facebook response JSON to a list of " + type.getName() + " instances", e);
+        "Unable to convert Facebook response JSON to a list of " + type.getName() + " instances. Offending JSON is '"
+            + sourceJson + "'.",
+        e);
     }
   }
 
-  private String convertArrayToStringIfNecessary(JsonValue jsonValue, String innerJson) {
-    // the inner JSON starts with square brackets but the parser don't think this is a JSON array,
-    // so we think the parser is right and add quotes around the string
-    // solves Issue #719
-    if (jsonValue.isString() && innerJson.startsWith("[")) {
-      innerJson = '"' + innerJson + '"';
-    }
-    return innerJson;
-  }
-
-  private void checkObjectIsMappedAsList(String json, boolean hasSingleDataProperty, Object jsonDataObject) {
-    if (!hasSingleDataProperty && !(jsonDataObject instanceof JsonArray)) {
+  private void checkObjectIsMappedAsList(String json, boolean hasSingleDataProperty, JsonValue jsonDataObject) {
+    if (!hasSingleDataProperty && !jsonDataObject.isArray()) {
       throw new FacebookJsonMappingException(
         "JSON is an object but is being mapped as a list instead. Offending JSON is '" + json + "'.");
     }
+  }
+
+  private boolean typeHasFacebookFields(Class<?> type) {
+    return !findFieldsWithAnnotation(type, Facebook.class).isEmpty();
   }
 
   @Override
   @SuppressWarnings("unchecked")
   public <T> T toJavaObject(String json, Class<T> type) {
     if (StringJsonUtils.isEmptyList(json)) {
-      return toJavaObject(StringJsonUtils.EMPTY_OBJECT, type);
+      json = StringJsonUtils.EMPTY_OBJECT;
     }
 
     checkJsonNotBlank(json);
     checkJsonNotList(json);
 
+    if (JsonObject.class.equals(type)) {
+      try {
+        JsonValue parsed = Json.parse(json);
+        if (parsed.isString()) {
+          return type.cast(Json.parse(parsed.asString()).asObject());
+        }
+        return type.cast(parsed.asObject());
+      } catch (ParseException | UnsupportedOperationException e) {
+        throw new FacebookJsonMappingException("Unable to parse JSON into JsonObject. Offending JSON is '" + json
+            + "'.",
+          e);
+      }
+    }
+
+    List<FieldWithAnnotation<Facebook>> listOfFieldsWithAnnotation = findFieldsWithAnnotation(type, Facebook.class);
+    if (listOfFieldsWithAnnotation.isEmpty() && !StringJsonUtils.isEmptyObject(json)) {
+      return toPrimitiveJavaType(json, type);
+    }
+
     try {
-      // Are we asked to map to JsonObject? If so, short-circuit right away.
+      JsonValue jsonValue = Json.parse(json);
+      return toJavaObject(jsonValue, type, json);
+    } catch (FacebookJsonMappingException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new FacebookJsonMappingException("Unable to map JSON to Java. Offending JSON is '" + json + "'.", e);
+    }
+  }
+
+  private <T> T toJavaObject(JsonValue jsonValue, Class<T> type) {
+    return toJavaObject(jsonValue, type, null);
+  }
+
+  private <T> T toJavaObject(JsonValue jsonValue, Class<T> type, String rawJson) {
+    String sourceJson = rawJson != null ? rawJson : (jsonValue == null ? "null" : jsonValue.toString());
+    try {
       if (type.equals(JsonObject.class)) {
-        return (T) Json.parse(json).asObject();
+        if (jsonValue.isString()) {
+          try {
+            return type.cast(Json.parse(jsonValue.asString()).asObject());
+          } catch (ParseException e) {
+            throw new FacebookJsonMappingException("Unable to parse JSON into JsonObject. Offending JSON is '"
+                + jsonValue + "'.",
+              e);
+          }
+        }
+        return type.cast(jsonValue.asObject());
       }
 
       List<FieldWithAnnotation<Facebook>> listOfFieldsWithAnnotation = findFieldsWithAnnotation(type, Facebook.class);
       Set<String> facebookFieldNamesWithMultipleMappings =
           facebookFieldNamesWithMultipleMappings(listOfFieldsWithAnnotation);
 
-      // If there are no annotated fields, assume we're mapping to a built-in
-      // type. If this is actually the empty object, just return a new instance
-      // of the corresponding Java type.
-      if (listOfFieldsWithAnnotation.isEmpty()) {
-        if (StringJsonUtils.isEmptyObject(json)) {
-          T instance = createInstance(type);
-
-          // If there are any methods annotated with @JsonMappingCompleted,
-          // invoke them.
-          invokeJsonMappingCompletedMethods(instance);
-
-          return instance;
-        } else {
-          return toPrimitiveJavaType(json, type);
-        }
-      }
-
-      // Facebook will sometimes return the string "null".
-      // Check for that and bail early if we find it.
-      if (StringJsonUtils.isNull(json)) {
+      if (jsonValue == null || jsonValue.isNull()) {
         return null;
       }
 
-      // Facebook will sometimes return the string "false" to mean null.
-      // Check for that and bail early if we find it.
-      if (StringJsonUtils.isFalse(json)) {
+      if (jsonValue.isBoolean() && !jsonValue.asBoolean()) {
         MAPPER_LOGGER.debug("Encountered 'false' from Facebook when trying to map to {} - mapping null instead.",
           type.getSimpleName());
         return null;
       }
 
-      JsonValue jsonValue = Json.parse(json);
+      if (listOfFieldsWithAnnotation.isEmpty()) {
+        if (jsonValue.isObject() && jsonValue.asObject().isEmpty()) {
+          T instance = createInstance(type);
+          invokeJsonMappingCompletedMethods(instance);
+          return instance;
+        }
+        return toPrimitiveJavaType(sourceJson, type);
+      }
+
+      if (jsonValue.isArray()) {
+        JsonArray array = jsonValue.asArray();
+        if (array.isEmpty()) {
+          jsonValue = new JsonObject();
+        } else {
+          return null;
+        }
+      }
+
       T instance = createInstance(type);
 
       if (instance instanceof JsonObject) {
-        return (T) jsonValue.asObject();
+        return type.cast(jsonValue.asObject());
       }
 
       if (!jsonValue.isObject()) {
@@ -227,34 +271,31 @@ public class DefaultJsonMapper implements JsonMapper {
 
       JsonObject jsonObject = jsonValue.asObject();
 
-      handleAbstractFacebookType(json, instance);
+      handleAbstractFacebookType(sourceJson, instance);
 
-      // For each Facebook-annotated field on the current Java object, pull data
-      // out of the JSON object and put it in the Java object
       for (FieldWithAnnotation<Facebook> fieldWithAnnotation : listOfFieldsWithAnnotation) {
         String facebookFieldName = getFacebookFieldName(fieldWithAnnotation);
 
         if (!jsonObject.contains(facebookFieldName)
             && !fieldWithAnnotation.getField().getType().equals(Optional.class)) {
-          MAPPER_LOGGER.trace("No JSON value present for '{}', skipping. JSON is '{}'.", facebookFieldName, json);
+          MAPPER_LOGGER.trace("No JSON value present for '{}', skipping. JSON is '{}'.", facebookFieldName, sourceJson);
           continue;
         }
 
         fieldWithAnnotation.getField().setAccessible(true);
 
-        setJavaFileValue(json, facebookFieldNamesWithMultipleMappings, instance, jsonObject, fieldWithAnnotation,
+        setJavaFileValue(sourceJson, facebookFieldNamesWithMultipleMappings, instance, jsonObject, fieldWithAnnotation,
           facebookFieldName);
       }
 
-      // If there are any methods annotated with @JsonMappingCompleted,
-      // invoke them.
       invokeJsonMappingCompletedMethods(instance);
 
       return instance;
     } catch (FacebookJsonMappingException e) {
       throw e;
     } catch (Exception e) {
-      throw new FacebookJsonMappingException("Unable to map JSON to Java. Offending JSON is '" + json + "'.", e);
+      throw new FacebookJsonMappingException("Unable to map JSON to Java. Offending JSON is '" + sourceJson + "'.",
+        e);
     }
   }
 
@@ -689,12 +730,12 @@ public class DefaultJsonMapper implements JsonMapper {
       return convertRawValueToList(rawValue, fieldWithAnnotation.getField());
     }
     if (typeIsMap(type)) {
-      return convertRawValueToMap(rawValue.toString(), fieldWithAnnotation.getField());
+      return convertRawValueToMap(rawValue, fieldWithAnnotation.getField());
     }
 
     if (typeIsOptional(type)) {
       return Optional.ofNullable(
-        toJavaObject(rawValue.toString(), getFirstParameterizedTypeArgument(fieldWithAnnotation.getField())));
+        toJavaObject(rawValue, getFirstParameterizedTypeArgument(fieldWithAnnotation.getField()), rawValue.toString()));
     }
 
     if (type.isEnum()) {
@@ -717,22 +758,20 @@ public class DefaultJsonMapper implements JsonMapper {
 
     String rawValueAsString = jsonHelper.getStringFrom(rawValue);
 
-    // Hack for issue #76 where FB will sometimes return a Post's Comments as
-    // "[]" instead of an object type (wtf)F
+    // Some other type - recurse into it
+    JsonValue nextValue = rawValue;
     if (Comments.class.isAssignableFrom(type) && rawValue instanceof JsonArray) {
       MAPPER_LOGGER.debug(
         "Encountered comment array '{}' but expected a {} object instead.  Working around that by coercing "
             + "into an empty {} instance...",
         rawValueAsString, Comments.class.getSimpleName(), Comments.class.getSimpleName());
-
       JsonObject workaroundJsonObject = new JsonObject();
       workaroundJsonObject.add("total_count", 0);
       workaroundJsonObject.add("data", new JsonArray());
+      nextValue = workaroundJsonObject;
       rawValueAsString = workaroundJsonObject.toString();
     }
-
-    // Some other type - recurse into it
-    return toJavaObject(rawValueAsString, type);
+    return toJavaObject(nextValue, type, rawValueAsString);
   }
 
   private Optional<Connection> convertRawValueToConnection(FieldWithAnnotation<Facebook> fieldWithAnnotation,
@@ -793,7 +832,7 @@ public class DefaultJsonMapper implements JsonMapper {
     return Optional.empty();
   }
 
-  private Map convertRawValueToMap(String json, Field field) {
+  private Map convertRawValueToMap(JsonValue jsonValue, Field field) {
     Class<?> firstParam = getFirstParameterizedTypeArgument(field);
     if (!typeIsString(firstParam)) {
       throw new FacebookJsonMappingException("The java type map needs to have a 'String' key, but is " + firstParam);
@@ -801,12 +840,11 @@ public class DefaultJsonMapper implements JsonMapper {
 
     Class<?> secondParam = getSecondParameterizedTypeArgument(field);
 
-    if (StringJsonUtils.isObject(json)) {
-      JsonObject jsonObject = Json.parse(json).asObject();
+    if (jsonValue != null && jsonValue.isObject()) {
+      JsonObject jsonObject = jsonValue.asObject();
       Map<String, Object> map = new HashMap<>();
       for (String key : jsonObject.names()) {
-        String value = jsonHelper.getStringFrom(jsonObject.get(key));
-        map.put(key, toJavaObject(value, secondParam));
+        map.put(key, toJavaObject(jsonObject.get(key), secondParam));
       }
       return map;
     }
@@ -831,7 +869,7 @@ public class DefaultJsonMapper implements JsonMapper {
     }
 
     if (type instanceof Class<?>) {
-      return toJavaList(rawJson.toString(), (Class<?>) type);
+      return toJavaList(rawJson, (Class<?>) type);
     }
 
     if (!(type instanceof ParameterizedType)) {
@@ -850,7 +888,8 @@ public class DefaultJsonMapper implements JsonMapper {
       List<Object> result = new ArrayList<>(jsonArray.size());
 
       for (JsonValue jsonValue : jsonArray) {
-        result.add(convertRawValueToList(jsonValue, innerType));
+        Object value = convertRawValueToList(jsonValue, innerType);
+        result.add(value);
       }
       return unmodifiableList(result);
     } catch (FacebookJsonMappingException e) {
