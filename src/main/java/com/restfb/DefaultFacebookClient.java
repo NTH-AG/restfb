@@ -33,8 +33,8 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.*;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -114,11 +114,6 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
   protected boolean accessTokenInHeader;
 
-  private Consumer<DebugHeaderInfo> debugHeaderInfoConsumer;
-  private Consumer<Map<String, List<String>>> responseHeaderConsumer;
-
-  private DebugHeaderInfo lastDebugHeaderInfo;
-  private Map<String, List<String>> lastResponseHeaders;
 
   protected DefaultFacebookClient() {
     this(Version.LATEST);
@@ -248,9 +243,16 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
   @Override
   public boolean deleteObject(String object, Parameter... parameters) {
+    return deleteObjectWithResult(object, parameters).getResult();
+  }
+
+  @Override
+  public ApiResult<Boolean> deleteObjectWithResult(String object, Parameter... parameters) {
     verifyParameterPresence("object", object);
 
-    String responseString = makeRequest(object, true, true, null, parameters);
+    RequestExecutionResult executionResult = makeRequestWithMetadata(object, true, true, null, parameters);
+    Response response = executionResult.getResponse();
+    String responseString = response.getBody();
 
     try {
       JsonValue jObj = Json.parse(responseString);
@@ -265,10 +267,11 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       } else {
         success = jObj.asBoolean();
       }
-      return success;
+      return toApiResult(success, executionResult);
     } catch (ParseException jex) {
       CLIENT_LOGGER.trace("no valid JSON returned while deleting a object, using returned String instead", jex);
-      return "true".equals(responseString);
+      boolean fallbackResult = "true".equals(responseString);
+      return toApiResult(fallbackResult, executionResult);
     }
   }
 
@@ -277,9 +280,18 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> Connection<T> fetchConnection(String connection, Class<T> connectionType, Parameter... parameters) {
+    return fetchConnectionWithResult(connection, connectionType, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<Connection<T>> fetchConnectionWithResult(String connection, Class<T> connectionType,
+      Parameter... parameters) {
     verifyParameterPresence(CONNECTION, connection);
     verifyParameterPresence(CONNECTION_TYPE, connectionType);
-    return new Connection<>(this, makeRequest(connection, parameters), connectionType);
+    RequestExecutionResult executionResult = makeRequestWithMetadata(connection, parameters);
+    Response response = executionResult.getResponse();
+    Connection<T> connectionResult = new Connection<>(this, response.getBody(), connectionType);
+    return toApiResult(connectionResult, executionResult);
   }
 
   /**
@@ -287,7 +299,21 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> Connection<T> fetchConnectionPage(final String connectionPageUrl, Class<T> connectionType) {
-    String connectionJson;
+    return fetchConnectionPageWithResult(connectionPageUrl, connectionType).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<Connection<T>> fetchConnectionPageWithResult(String connectionPageUrl, Class<T> connectionType) {
+    verifyParameterPresence("connectionPageUrl", connectionPageUrl);
+    verifyParameterPresence(CONNECTION_TYPE, connectionType);
+
+    RequestExecutionResult executionResult = fetchConnectionPageResponse(connectionPageUrl);
+    String connectionJson = executionResult.getResponse().getBody();
+    Connection<T> connection = new Connection<>(this, connectionJson, connectionType);
+    return toApiResult(connection, executionResult);
+  }
+
+  private RequestExecutionResult fetchConnectionPageResponse(String connectionPageUrl) {
     if (!isBlank(accessToken) && !isBlank(appSecret)) {
       if (isAppSecretProofWithTime()) {
         long now = System.currentTimeMillis() / 1000;
@@ -296,18 +322,15 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
               String.format("%s&%s=%s&%s=%s", connectionPageUrl, urlEncode(APP_SECRET_PROOF_TIME_PARAM_NAME), now,
                 urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken + "|" + now, appSecret)),
               null);
-        connectionJson = makeRequestAndProcessResponse(() -> webRequestor.executeGet(request));
+        return executeGetRequest(request);
       } else {
         WebRequestor.Request request = new WebRequestor.Request(String.format("%s&%s=%s", connectionPageUrl,
           urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken, appSecret)), null);
-        connectionJson = makeRequestAndProcessResponse(() -> webRequestor.executeGet(request));
+        return executeGetRequest(request);
       }
-    } else {
-      connectionJson = makeRequestAndProcessResponse(
-        () -> webRequestor.executeGet(new WebRequestor.Request(connectionPageUrl, getHeaderAccessToken())));
     }
 
-    return new Connection<>(this, connectionJson, connectionType);
+    return executeGetRequest(new WebRequestor.Request(connectionPageUrl, getHeaderAccessToken()));
   }
 
   /**
@@ -315,9 +338,16 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> T fetchObject(String object, Class<T> objectType, Parameter... parameters) {
+    return fetchObjectWithResult(object, objectType, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<T> fetchObjectWithResult(String object, Class<T> objectType, Parameter... parameters) {
     verifyParameterPresence("object", object);
     verifyParameterPresence("objectType", objectType);
-    return jsonMapper.toJavaObject(makeRequest(object, parameters), objectType);
+    RequestExecutionResult executionResult = makeRequestWithMetadata(object, parameters);
+    T mapped = jsonMapper.toJavaObject(executionResult.getResponse().getBody(), objectType);
+    return toApiResult(mapped, executionResult);
   }
 
   @Override
@@ -330,6 +360,11 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> T fetchObjects(List<String> ids, Class<T> objectType, Parameter... parameters) {
+    return fetchObjectsWithResult(ids, objectType, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<T> fetchObjectsWithResult(List<String> ids, Class<T> objectType, Parameter... parameters) {
     verifyParameterPresence("ids", ids);
     verifyParameterPresence(CONNECTION_TYPE, objectType);
     requireNotEmpty(ids, "The list of IDs cannot be empty.");
@@ -348,10 +383,11 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     }
 
     try {
-      String jsonString = makeRequest("",
+      RequestExecutionResult executionResult = makeRequestWithMetadata("",
         parametersWithAdditionalParameter(Parameter.with(IDS_PARAM_NAME, idArray.toString()), parameters));
 
-      return jsonMapper.toJavaObject(jsonString, objectType);
+      T mapped = jsonMapper.toJavaObject(executionResult.getResponse().getBody(), objectType);
+      return toApiResult(mapped, executionResult);
     } catch (ParseException e) {
       throw new FacebookJsonMappingException("Unable to map connection JSON to Java objects", e);
     }
@@ -363,6 +399,16 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     }
   }
 
+  private <T> ApiResult<T> toApiResult(T result, RequestExecutionResult executionResult) {
+    Response response = Optional.ofNullable(executionResult).map(RequestExecutionResult::getResponse).orElse(null);
+    DebugHeaderInfo debugHeaderInfo = Optional.ofNullable(response).map(Response::getDebugHeaderInfo).orElse(null);
+    Map<String, List<String>> headers = Optional.ofNullable(response).map(Response::getHeaders).orElse(null);
+    Duration duration = Optional.ofNullable(executionResult).map(RequestExecutionResult::getDuration).orElse(null);
+    String httpMethod = Optional.ofNullable(executionResult).map(RequestExecutionResult::getHttpMethod).orElse(null);
+    String requestUrl = Optional.ofNullable(executionResult).map(RequestExecutionResult::getRequestUrl).orElse(null);
+    return ApiResult.withMetadata(result, debugHeaderInfo, headers, duration, httpMethod, requestUrl);
+  }
+
   /**
    * @see com.restfb.FacebookClient#publish(java.lang.String, java.lang.Class, com.restfb.BinaryAttachment,
    *      com.restfb.Parameter[])
@@ -370,9 +416,17 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
   @Override
   public <T> T publish(String connection, Class<T> objectType, List<BinaryAttachment> binaryAttachments,
       Parameter... parameters) {
-    verifyParameterPresence(CONNECTION, connection);
+    return publishWithResult(connection, objectType, binaryAttachments, parameters).getResult();
+  }
 
-    return jsonMapper.toJavaObject(makeRequest(connection, true, false, binaryAttachments, parameters), objectType);
+  @Override
+  public <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType,
+      List<BinaryAttachment> binaryAttachments, Parameter... parameters) {
+    verifyParameterPresence(CONNECTION, connection);
+    RequestExecutionResult executionResult =
+        makeRequestWithMetadata(connection, true, false, binaryAttachments, parameters);
+    T mapped = jsonMapper.toJavaObject(executionResult.getResponse().getBody(), objectType);
+    return toApiResult(mapped, executionResult);
   }
 
   /**
@@ -382,9 +436,15 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
   @Override
   public <T> T publish(String connection, Class<T> objectType, BinaryAttachment binaryAttachment,
       Parameter... parameters) {
+    return publishWithResult(connection, objectType, binaryAttachment, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, BinaryAttachment binaryAttachment,
+      Parameter... parameters) {
     List<BinaryAttachment> attachments =
         Optional.ofNullable(binaryAttachment).map(Collections::singletonList).orElse(null);
-    return publish(connection, objectType, attachments, parameters);
+    return publishWithResult(connection, objectType, attachments, parameters);
   }
 
   /**
@@ -392,13 +452,26 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> T publish(String connection, Class<T> objectType, Parameter... parameters) {
-    return publish(connection, objectType, (List<BinaryAttachment>) null, parameters);
+    return publishWithResult(connection, objectType, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, Parameter... parameters) {
+    return publishWithResult(connection, objectType, (List<BinaryAttachment>) null, parameters);
   }
 
   @Override
   public <T> T publish(String connection, Class<T> objectType, Body body, Parameter... parameters) {
+    return publishWithResult(connection, objectType, body, parameters).getResult();
+  }
+
+  @Override
+  public <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, Body body,
+      Parameter... parameters) {
     verifyParameterPresence(CONNECTION, connection);
-    return jsonMapper.toJavaObject(makeRequest(connection, true, false, null, body, parameters), objectType);
+    RequestExecutionResult executionResult = makeRequestWithMetadata(connection, true, false, null, body, parameters);
+    T mapped = jsonMapper.toJavaObject(executionResult.getResponse().getBody(), objectType);
+    return toApiResult(mapped, executionResult);
   }
 
   @Override
@@ -777,17 +850,32 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    *           If an error occurs while making the Facebook API POST or processing the response.
    */
   protected String makeRequest(String endpoint, Parameter... parameters) {
-    return makeRequest(endpoint, false, false, null, parameters);
+    return makeRequestForResponse(endpoint, parameters).getBody();
   }
 
   protected String makeRequest(String endpoint, final boolean executeAsPost, final boolean executeAsDelete,
       final List<BinaryAttachment> binaryAttachments, Parameter... parameters) {
-    return makeRequest(endpoint, executeAsPost, executeAsDelete, binaryAttachments, null, parameters);
+    return makeRequestForResponse(endpoint, executeAsPost, executeAsDelete, binaryAttachments, parameters).getBody();
+  }
+
+  protected String makeRequest(String endpoint, final boolean executeAsPost, final boolean executeAsDelete,
+      final List<BinaryAttachment> binaryAttachments, Body body, Parameter... parameters) {
+    return makeRequestForResponse(endpoint, executeAsPost, executeAsDelete, binaryAttachments, body, parameters)
+      .getBody();
+  }
+
+  protected Response makeRequestForResponse(String endpoint, Parameter... parameters) {
+    return makeRequestWithMetadata(endpoint, parameters).getResponse();
+  }
+
+  protected Response makeRequestForResponse(String endpoint, final boolean executeAsPost, final boolean executeAsDelete,
+      final List<BinaryAttachment> binaryAttachments, Parameter... parameters) {
+    return makeRequestWithMetadata(endpoint, executeAsPost, executeAsDelete, binaryAttachments, null, parameters)
+      .getResponse();
   }
 
   /**
-   * Coordinates the process of executing the API request GET/POST and processing the response we receive from the
-   * endpoint.
+   * Coordinates the process of executing the API request GET/POST and returning the raw response.
    * 
    * @param endpoint
    *          Facebook Graph API endpoint.
@@ -798,14 +886,17 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    * @param binaryAttachments
    *          A list of binary files to include in a {@code POST} request. Pass {@code null} if no attachment should be
    *          sent.
+   * @param body
+   *          Optional body used for POST requests.
    * @param parameters
    *          Arbitrary number of parameters to send along to Facebook as part of the API call.
-   * @return The JSON returned by Facebook for the API call.
+   * @return The raw response returned by Facebook for the API call.
    * @throws FacebookException
    *           If an error occurs while making the Facebook API POST or processing the response.
    */
-  protected String makeRequest(String endpoint, final boolean executeAsPost, final boolean executeAsDelete,
-      final List<BinaryAttachment> binaryAttachments, Body body, Parameter... parameters) {
+  protected RequestExecutionResult makeRequestWithMetadata(String endpoint, final boolean executeAsPost,
+      final boolean executeAsDelete, final List<BinaryAttachment> binaryAttachments, Body body,
+      Parameter... parameters) {
     verifyParameterLegality(parameters);
 
     if (executeAsDelete && isHttpDeleteFallback()) {
@@ -824,20 +915,45 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
     String headerAccessToken = (hasReel) ? accessToken : getHeaderAccessToken();
 
-    return makeRequestAndProcessResponse(() -> {
-      WebRequestor.Request request = new WebRequestor.Request(fullEndpoint, headerAccessToken, parameterString);
-      if (executeAsDelete && !isHttpDeleteFallback()) {
-        return webRequestor.executeDelete(request);
-      }
+    WebRequestor.Request request = new WebRequestor.Request(fullEndpoint, headerAccessToken, parameterString);
+    request.setBinaryAttachments(binaryAttachments);
+    request.setBody(body);
 
-      if (executeAsPost) {
-        request.setBinaryAttachments(binaryAttachments);
-        request.setBody(body);
-        return webRequestor.executePost(request);
-      }
+    String httpMethod;
+    Requestor requestor;
 
-      return webRequestor.executeGet(request);
-    });
+    if (executeAsDelete && !isHttpDeleteFallback()) {
+      httpMethod = "DELETE";
+      requestor = () -> webRequestor.executeDelete(request);
+    } else if (executeAsPost) {
+      httpMethod = "POST";
+      requestor = () -> webRequestor.executePost(request);
+    } else {
+      httpMethod = "GET";
+      requestor = () -> webRequestor.executeGet(request);
+    }
+
+    return executeRequestWithMetadata(httpMethod, request.getFullUrl(), requestor);
+  }
+
+  protected Response makeRequestForResponse(String endpoint, final boolean executeAsPost,
+      final boolean executeAsDelete, final List<BinaryAttachment> binaryAttachments, Body body,
+      Parameter... parameters) {
+    return makeRequestWithMetadata(endpoint, executeAsPost, executeAsDelete, binaryAttachments, body, parameters)
+      .getResponse();
+  }
+
+  protected RequestExecutionResult makeRequestWithMetadata(String endpoint, Parameter... parameters) {
+    return makeRequestWithMetadata(endpoint, false, false, null, null, parameters);
+  }
+
+  protected RequestExecutionResult makeRequestWithMetadata(String endpoint, final boolean executeAsPost,
+      final boolean executeAsDelete, final List<BinaryAttachment> binaryAttachments, Parameter... parameters) {
+    return makeRequestWithMetadata(endpoint, executeAsPost, executeAsDelete, binaryAttachments, null, parameters);
+  }
+
+  private RequestExecutionResult executeGetRequest(WebRequestor.Request request) {
+    return executeRequestWithMetadata("GET", request.getFullUrl(), () -> webRequestor.executeGet(request));
   }
 
   private String getHeaderAccessToken() {
@@ -879,49 +995,14 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     this.httpDeleteFallback = httpDeleteFallback;
   }
 
-  @Override
-  public void setDebugHeaderInfoConsumer(Consumer<DebugHeaderInfo> debugHeaderInfoConsumer) {
-    this.debugHeaderInfoConsumer = debugHeaderInfoConsumer;
-  }
-
-  @Override
-  @Deprecated
-  public DebugHeaderInfo getLastDebugHeaderInfo() {
-    return lastDebugHeaderInfo;
-  }
-
-  @Override
-  public void setResponseHeaderConsumer(Consumer<Map<String, List<String>>> responseHeaderConsumer) {
-    this.responseHeaderConsumer = responseHeaderConsumer;
-  }
-
-  @Override
-  @Deprecated
-  public Map<String, List<String>> getLastResponseHeaders() {
-    return lastResponseHeaders;
-  }
-
-  protected void processResponseMetadata(Response response) {
-    DebugHeaderInfo debugHeaderInfo = Optional.ofNullable(response).map(Response::getDebugHeaderInfo).orElse(null);
-    Map<String, List<String>> headers = Optional.ofNullable(response).map(Response::getHeaders).orElse(null);
-
-    lastDebugHeaderInfo = debugHeaderInfo;
-    lastResponseHeaders = headers;
-
-    if (debugHeaderInfo != null && debugHeaderInfoConsumer != null) {
-      debugHeaderInfoConsumer.accept(debugHeaderInfo);
-    }
-    if (headers != null && responseHeaderConsumer != null) {
-      responseHeaderConsumer.accept(headers);
-    }
-  }
-
   protected interface Requestor {
     Response makeRequest() throws IOException;
   }
 
-  protected String makeRequestAndProcessResponse(Requestor requestor) {
+  protected RequestExecutionResult executeRequestWithMetadata(String httpMethod, String requestUrl,
+      Requestor requestor) {
     Response response;
+    long start = System.nanoTime();
 
     // Perform a GET or POST to the API endpoint
     try {
@@ -938,8 +1019,6 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       throw new FacebookNetworkException(t);
     }
 
-    processResponseMetadata(response);
-
     // If we get any HTTP response code other than a 200 OK or 400 Bad Request
     // or 401 Not Authorized or 403 Forbidden or 404 Not Found or 500 Internal
     // Server Error or 302 Not Modified
@@ -951,11 +1030,10 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       throw new FacebookNetworkException(response.getStatusCode());
     }
 
-    String json = response.getBody();
-
     try {
       // If the response contained an error code, throw an exception.
-      getFacebookExceptionGenerator().throwFacebookResponseStatusExceptionIfNecessary(json, response.getStatusCode());
+      getFacebookExceptionGenerator().throwFacebookResponseStatusExceptionIfNecessary(response.getBody(),
+        response.getStatusCode());
     } catch (FacebookErrorMessageException feme) {
       Optional.ofNullable(response).map(Response::getDebugHeaderInfo).ifPresent(feme::setDebugHeaderInfo);
       throw feme;
@@ -967,7 +1045,38 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       throw new FacebookNetworkException(response.getStatusCode());
     }
 
-    return json;
+    Duration duration = Duration.ofNanos(System.nanoTime() - start);
+    return new RequestExecutionResult(response, duration, httpMethod, requestUrl);
+  }
+
+  protected static class RequestExecutionResult {
+    private final Response response;
+    private final Duration duration;
+    private final String httpMethod;
+    private final String requestUrl;
+
+    RequestExecutionResult(Response response, Duration duration, String httpMethod, String requestUrl) {
+      this.response = response;
+      this.duration = duration;
+      this.httpMethod = httpMethod;
+      this.requestUrl = requestUrl;
+    }
+
+    public Response getResponse() {
+      return response;
+    }
+
+    public Duration getDuration() {
+      return duration;
+    }
+
+    public String getHttpMethod() {
+      return httpMethod;
+    }
+
+    public String getRequestUrl() {
+      return requestUrl;
+    }
   }
 
   /**

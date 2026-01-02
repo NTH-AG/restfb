@@ -61,8 +61,8 @@ class DefaultFacebookClientTest {
       super("token", new DefaultWebRequestor(), new DefaultJsonMapper(), Version.LATEST);
     }
 
-    String invokeMakeRequest(Requestor requestor) {
-      return makeRequestAndProcessResponse(requestor);
+    void invokeMakeRequest(Requestor requestor) {
+      executeRequestWithMetadata(null, null, requestor);
     }
   }
 }

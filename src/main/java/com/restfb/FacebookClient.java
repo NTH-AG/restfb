@@ -23,7 +23,6 @@ package com.restfb;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchResponse;
@@ -86,8 +85,29 @@ public interface FacebookClient {
    * @return An instance of type {@code objectType} which contains the requested object's data.
    * @throws FacebookException
    *           If an error occurs while performing the API call.
-   */
+  */
   <T> T fetchObject(String object, Class<T> objectType, Parameter... parameters);
+
+  /**
+   * Variant of {@link #fetchObject(String, Class, Parameter...)} that additionally exposes response metadata (debug
+   * headers, raw headers, HTTP method, request URL, and duration) in an {@link ApiResult} wrapper.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param object
+   *          ID of the object to fetch, e.g. {@code "me"}.
+   * @param objectType
+   *          Object type token.
+   * @param parameters
+   *          URL parameters to include in the API call (optional).
+   * @return ApiResult containing the mapped object plus response metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> fetchObjectWithResult(String object, Class<T> objectType, Parameter... parameters) {
+    return ApiResult.withoutMetadata(fetchObject(object, objectType, parameters));
+  }
 
   /**
    * creates a new <code>FacebookClient</code> from an old one.
@@ -122,6 +142,27 @@ public interface FacebookClient {
   <T> T fetchObjects(List<String> ids, Class<T> objectType, Parameter... parameters);
 
   /**
+   * Variant of {@link #fetchObjects(List, Class, Parameter...)} that exposes response metadata in an
+   * {@link ApiResult} wrapper.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param ids
+   *          IDs of the objects to fetch.
+   * @param objectType
+   *          Object type token.
+   * @param parameters
+   *          URL parameters to include in the API call (optional).
+   * @return ApiResult containing the mapped objects plus response metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> fetchObjectsWithResult(List<String> ids, Class<T> objectType, Parameter... parameters) {
+    return ApiResult.withoutMetadata(fetchObjects(ids, objectType, parameters));
+  }
+
+  /**
    * Fetches a Graph API {@code Connection} type, mapping the result to an instance of {@code connectionType}.
    * 
    * @param <T>
@@ -139,6 +180,28 @@ public interface FacebookClient {
   <T> Connection<T> fetchConnection(String connection, Class<T> connectionType, Parameter... parameters);
 
   /**
+   * Variant of {@link #fetchConnection(String, Class, Parameter...)} that exposes response metadata in an
+   * {@link ApiResult} wrapper.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connection
+   *          The Connection to fetch.
+   * @param connectionType
+   *          Object type token.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the {@link Connection} plus response metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<Connection<T>> fetchConnectionWithResult(String connection, Class<T> connectionType,
+      Parameter... parameters) {
+    return ApiResult.withoutMetadata(fetchConnection(connection, connectionType, parameters));
+  }
+
+  /**
    * Fetches a previous/next page of a Graph API {@code Connection} type, mapping the result to an instance of
    * {@code connectionType}.
    * 
@@ -154,6 +217,26 @@ public interface FacebookClient {
    *           If an error occurs while performing the API call.
    */
   <T> Connection<T> fetchConnectionPage(String connectionPageUrl, Class<T> connectionType);
+
+  /**
+   * Variant of {@link #fetchConnectionPage(String, Class)} that additionally exposes response metadata in an
+   * {@link ApiResult} wrapper (debug headers, response headers, HTTP method, duration, etc.).
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connectionPageUrl
+   *          URL provided by Facebook to fetch the next page of the connection.
+   * @param connectionType
+   *          Connection type token.
+   * @return ApiResult containing the {@link Connection} page plus response metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<Connection<T>> fetchConnectionPageWithResult(String connectionPageUrl,
+      Class<T> connectionType) {
+    return ApiResult.withoutMetadata(fetchConnectionPage(connectionPageUrl, connectionType));
+  }
 
   /**
    * Executes operations as a batch using the <a href="https://developers.facebook.com/docs/reference/api/batch/">Batch
@@ -207,6 +290,26 @@ public interface FacebookClient {
   <T> T publish(String connection, Class<T> objectType, Parameter... parameters);
 
   /**
+   * Variant of {@link #publish(String, Class, Parameter...)} that additionally exposes response metadata.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connection
+   *          The Connection to publish to.
+   * @param objectType
+   *          Object type token.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the publish response plus metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, Parameter... parameters) {
+    return ApiResult.withoutMetadata(publish(connection, objectType, parameters));
+  }
+
+  /**
    * Performs a <a href="http://developers.facebook.com/docs/api#publishing">Graph API publish</a> operation on the
    * given {@code connection} and includes some files - photos, for example - in the publish request, and mapping the
    * result to an instance of {@code objectType}.
@@ -227,6 +330,29 @@ public interface FacebookClient {
    */
   <T> T publish(String connection, Class<T> objectType, List<BinaryAttachment> binaryAttachments,
       Parameter... parameters);
+
+  /**
+   * Variant of {@link #publish(String, Class, List, Parameter...)} that additionally exposes response metadata.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connection
+   *          The Connection to publish to.
+   * @param objectType
+   *          Object type token.
+   * @param binaryAttachments
+   *          The files to include in the publish request.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the publish response plus metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType,
+      List<BinaryAttachment> binaryAttachments, Parameter... parameters) {
+    return ApiResult.withoutMetadata(publish(connection, objectType, binaryAttachments, parameters));
+  }
 
   /**
    * Performs a <a href="http://developers.facebook.com/docs/api#publishing">Graph API publish</a> operation on the
@@ -250,6 +376,30 @@ public interface FacebookClient {
   <T> T publish(String connection, Class<T> objectType, BinaryAttachment binaryAttachment, Parameter... parameters);
 
   /**
+   * Variant of {@link #publish(String, Class, BinaryAttachment, Parameter...)} that additionally exposes response
+   * metadata.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connection
+   *          The Connection to publish to.
+   * @param objectType
+   *          Object type token.
+   * @param binaryAttachment
+   *          The file to include in the publish request.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the publish response plus metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, BinaryAttachment binaryAttachment,
+      Parameter... parameters) {
+    return ApiResult.withoutMetadata(publish(connection, objectType, binaryAttachment, parameters));
+  }
+
+  /**
    * Performs a <a href="http://developers.facebook.com/docs/api#publishing">Graph API publish</a> operation on the
    * given {@code connection} and includes special body in the publish request, and mapping the result to an instance of
    * {@code objectType}.
@@ -271,6 +421,29 @@ public interface FacebookClient {
   <T> T publish(String connection, Class<T> objectType, Body body, Parameter... parameters);
 
   /**
+   * Variant of {@link #publish(String, Class, Body, Parameter...)} that additionally exposes response metadata.
+   *
+   * @param <T>
+   *          Java type to map to.
+   * @param connection
+   *          The Connection to publish to.
+   * @param objectType
+   *          Object type token.
+   * @param body
+   *          The body used in the POST request.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the publish response plus metadata.
+   * @throws FacebookException
+   *           If an error occurs while performing the API call.
+   * @since 2026.0.0
+   */
+  default <T> ApiResult<T> publishWithResult(String connection, Class<T> objectType, Body body,
+      Parameter... parameters) {
+    return ApiResult.withoutMetadata(publish(connection, objectType, body, parameters));
+  }
+
+  /**
    * Performs a <a href="http://developers.facebook.com/docs/api#deleting">Graph API delete</a> operation on the given
    * {@code object}.
    * 
@@ -283,6 +456,22 @@ public interface FacebookClient {
    *           If an error occurred while attempting to delete the object.
    */
   boolean deleteObject(String object, Parameter... parameters);
+
+  /**
+   * Variant of {@link #deleteObject(String, Parameter...)} that additionally exposes response metadata.
+   *
+   * @param object
+   *          The ID of the object to delete.
+   * @param parameters
+   *          URL parameters to include in the API call.
+   * @return ApiResult containing the delete success flag plus metadata.
+   * @throws FacebookException
+   *           If an error occurred while attempting to delete the object.
+   * @since 2026.0.0
+   */
+  default ApiResult<Boolean> deleteObjectWithResult(String object, Parameter... parameters) {
+    return ApiResult.withoutMetadata(deleteObject(object, parameters));
+  }
 
   /**
    * Converts an arbitrary number of {@code sessionKeys} to OAuth access tokens.
@@ -549,52 +738,6 @@ public interface FacebookClient {
    * @since 1.6.7
    */
   WebRequestor getWebRequestor();
-
-  /**
-   * Registers a consumer that can inspect the {@link DebugHeaderInfo} parsed from each response.
-   *
-   * @param consumer
-   *          consumer invoked with the parsed debug information; default implementation is a no-op
-   * @since 2025.16.0
-   */
-  default void setDebugHeaderInfoConsumer(Consumer<DebugHeaderInfo> consumer) {
-    // no-op default for clients that do not expose debug info
-  }
-
-  /**
-   * Returns the last parsed {@link DebugHeaderInfo}, if available.
-   *
-   * @return most recent debug header information or {@code null}
-   * @since 2025.16.0
-   * @deprecated Use {@link #setDebugHeaderInfoConsumer(java.util.function.Consumer)} to observe debug headers instead
-   */
-  @Deprecated
-  default DebugHeaderInfo getLastDebugHeaderInfo() {
-    return null;
-  }
-
-  /**
-   * Registers a consumer that observes all response headers.
-   * 
-   * @param consumer
-   *          consumer receiving the unmodifiable header map; default implementation is a no-op
-   * @since 2025.16.0
-   */
-  default void setResponseHeaderConsumer(Consumer<Map<String, List<String>>> consumer) {
-    // no-op default for clients that do not expose header information
-  }
-
-  /**
-   * Returns the headers of the last response, if available.
-   * 
-   * @return most recent response headers or {@code null}
-   * @since 2025.16.0
-   * @deprecated Use {@link #setResponseHeaderConsumer(java.util.function.Consumer)} to inspect headers instead
-   */
-  @Deprecated
-  default Map<String, List<String>> getLastResponseHeaders() {
-    return null;
-  }
 
   /**
    * generates an logout url

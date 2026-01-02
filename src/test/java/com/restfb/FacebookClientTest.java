@@ -41,6 +41,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.restfb.Connection;
 import com.restfb.WebRequestor.Response;
 import com.restfb.exception.FacebookJsonMappingException;
 import com.restfb.exception.FacebookOAuthException;
@@ -140,33 +141,56 @@ class FacebookClientTest {
   }
 
   @Test
-  void debugHeaderInfoConsumerReceivesInfo() {
+  void fetchObjectResultContainsMetadata() {
     DebugHeaderInfo debugHeaderInfo = DebugHeaderInfo.DebugHeaderInfoFactory.create().setTraceId("trace").build();
-    DefaultFacebookClient facebookClient =
-        (DefaultFacebookClient) facebookClientWithResponse(new Response(200, "{\"id\":\"1\"}", debugHeaderInfo));
-    final DebugHeaderInfo[] consumed = new DebugHeaderInfo[1];
-    facebookClient.setDebugHeaderInfoConsumer(info -> consumed[0] = info);
-
-    facebookClient.fetchObject("me", User.class);
-
-    assertThat(facebookClient.getLastDebugHeaderInfo()).isSameAs(debugHeaderInfo);
-    assertThat(consumed[0]).isSameAs(debugHeaderInfo);
-  }
-
-  @Test
-  void responseHeaderConsumerReceivesInfo() {
     Map<String, List<String>> headers = new HashMap<>();
     headers.put("facebook-api-version", Collections.singletonList("v25.0"));
     DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
-      new Response(200, "{\"id\":\"1\"}", null, headers));
+      new Response(200, "{\"id\":\"1\"}", debugHeaderInfo, headers));
 
-    final Map<String, List<String>>[] consumed = new Map[1];
-    facebookClient.setResponseHeaderConsumer(map -> consumed[0] = map);
+    ApiResult<User> result = facebookClient.fetchObjectWithResult("me", User.class);
 
-    facebookClient.fetchObject("me", User.class);
+    assertThat(result.getResult()).isNotNull();
+    assertThat(result.getDebugHeaderInfo()).isSameAs(debugHeaderInfo);
+    assertThat(result.getResponseHeaders()).containsEntry("facebook-api-version",
+      Collections.singletonList("v25.0"));
+    assertThat(result.getDuration()).isNotNull();
+    assertThat(result.getHttpMethod()).isEqualTo("GET");
+    assertThat(result.getRequestUrl()).contains("me");
+  }
 
-    assertThat(facebookClient.getLastResponseHeaders()).isEqualTo(headers);
-    assertThat(consumed[0]).isEqualTo(headers);
+  @Test
+  void deleteObjectResultContainsMetadata() {
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put("facebook-api-version", Collections.singletonList("v25.0"));
+    DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
+      new Response(200, "{\"success\":true}", null, headers));
+
+    ApiResult<Boolean> result = facebookClient.deleteObjectWithResult("123");
+
+    assertThat(result.getResult()).isTrue();
+    assertThat(result.getResponseHeaders()).containsEntry("facebook-api-version",
+      Collections.singletonList("v25.0"));
+    assertThat(result.getDuration()).isNotNull();
+    assertThat(result.getHttpMethod()).isEqualTo("DELETE");
+    assertThat(result.getRequestUrl()).contains("123");
+  }
+
+  @Test
+  void fetchConnectionPageResultContainsMetadata() {
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put("facebook-api-version", Collections.singletonList("v25.0"));
+    DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
+      new Response(200, "{\"data\":[]}", null, headers));
+
+    ApiResult<Connection<User>> result =
+        facebookClient.fetchConnectionPageWithResult("https://graph.facebook.com/foo", User.class);
+
+    assertThat(result.getResult()).isNotNull();
+    assertThat(result.getResponseHeaders()).containsEntry("facebook-api-version",
+      Collections.singletonList("v25.0"));
+    assertThat(result.getHttpMethod()).isEqualTo("GET");
+    assertThat(result.getRequestUrl()).contains("graph.facebook.com");
   }
 
   @Test
