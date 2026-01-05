@@ -31,53 +31,6 @@ public enum Version {
   UNVERSIONED(null),
 
   /**
-   * <tt>Graph API 12.0</tt>, available until February 8th, 2024
-   *
-   * @since September 14th, 2021
-   */
-  @Deprecated
-  VERSION_12_0("v12.0"),
-
-  /**
-   * <tt>Graph API 13.0</tt>, available until May 28th, 2024
-   *
-   * @since February 8th, 2022
-   */
-  @Deprecated
-  VERSION_13_0("v13.0"),
-
-  /**
-   * <tt>Graph API 14.0</tt>, available until September 17th, 2024
-   *
-   * @since May 25th, 2022
-   */
-  @Deprecated
-  VERSION_14_0("v14.0"),
-
-  /**
-   * <tt>Graph API 15.0</tt>, available until February 2nd, 2025
-   *
-   * @since September 17th, 2022
-   */
-  @Deprecated
-  VERSION_15_0("v15.0"),
-
-  /**
-   * <tt>Graph API 16.0</tt>, available until May 23, 2025
-   *
-   * @since February 2nd, 2023
-   */
-  @Deprecated
-  VERSION_16_0("v16.0"),
-
-  /**
-   * <tt>Graph API 17.0</tt>, available until September 12, 2025
-   *
-   * @since May 23, 2023
-   */
-  VERSION_17_0("v17.0"),
-
-  /**
    * <tt>Graph API 18.0</tt>, available at least until January 23, 2026
    *
    * @since September 12, 2023
