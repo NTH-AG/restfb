@@ -334,9 +334,30 @@ public class Connection<T> implements Iterable<List<T>> {
 
   /**
    * returns the JSON this connection is based on, it can be used for debug logs for example
+   * 
    * @return JSON as String the connection is based on
    */
   public String getJson() {
     return json;
+  }
+
+  /**
+   * Override the next page URL - use at your own risk
+   * 
+   * @param nextPageUrl
+   *          Custom next Page URL as String
+   */
+  public void setNextPageUrl(String nextPageUrl) {
+    this.nextPageUrl = nextPageUrl;
+  }
+
+  /**
+   * Override the previous page URL - use at your own risk
+   * 
+   * @param previousPageUrl
+   *          Custom previous Page URL as String
+   */
+  public void setPreviousPageUrl(String previousPageUrl) {
+    this.previousPageUrl = previousPageUrl;
   }
 }
