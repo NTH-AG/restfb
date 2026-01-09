@@ -24,6 +24,7 @@
     <version.assertj>3.27.6</version.assertj>
     <version.slf4j>[1.7.32,)</version.slf4j>
     <version.bundlor>1.1.2.RELEASE</version.bundlor>
+    <version.sonar.maven.plugin>3.11.0.3922</version.sonar.maven.plugin>
 
     <!-- additional configuration -->
     <year.current>2024</year.current>
@@ -348,6 +349,11 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonarsource.scanner.maven</groupId>
+        <artifactId>sonar-maven-plugin</artifactId>
+        <version>${version.sonar.maven.plugin}</version>
       </plugin>
     </plugins>
   </build>
