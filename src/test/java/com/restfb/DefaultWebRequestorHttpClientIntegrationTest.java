@@ -22,12 +22,23 @@
 package com.restfb;
 
 import static com.restfb.testutils.RestfbAssertions.assertThat;
+import static com.restfb.testutils.RestfbAssertions.assertThatThrownBy;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -90,5 +101,75 @@ class DefaultWebRequestorHttpClientIntegrationTest {
     assertThat(response.getStatusCode()).isEqualTo(200);
     assertThat(response.getBody()).contains("message");
     assertThat(lastPostBody.get()).contains("message");
+  }
+
+  @Test
+  void executeGetFailsOnIncompleteBody() throws Exception {
+    IncompleteResponseServer incompleteServer = new IncompleteResponseServer();
+    incompleteServer.start();
+
+    try {
+      DefaultWebRequestor requestor = new DefaultWebRequestor();
+      WebRequestor.Request request = new WebRequestor.Request(incompleteServer.url(), null);
+
+      assertThatThrownBy(() -> requestor.executeGet(request)).isInstanceOf(IOException.class)
+        .hasMessageContaining("Incomplete response body");
+    } finally {
+      incompleteServer.stop();
+    }
+  }
+
+  private static final class IncompleteResponseServer {
+    private final ServerSocket serverSocket;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    private IncompleteResponseServer() throws IOException {
+      serverSocket = new ServerSocket(0);
+    }
+
+    private void start() {
+      executor.submit(this::handleConnection);
+    }
+
+    private String url() {
+      return "http://localhost:" + serverSocket.getLocalPort() + "/incomplete";
+    }
+
+    private void stop() throws Exception {
+      serverSocket.close();
+      executor.shutdownNow();
+      executor.awaitTermination(5, TimeUnit.SECONDS);
+    }
+
+    private void handleConnection() {
+      try (Socket socket = serverSocket.accept()) {
+        consumeRequest(socket.getInputStream());
+
+        byte[] fullBody = "{\"message\":\"hi\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] truncatedBody = Arrays.copyOf(fullBody, fullBody.length - 2);
+
+        OutputStream outputStream = socket.getOutputStream();
+        writeString(outputStream, "HTTP/1.1 200 OK\r\n");
+        writeString(outputStream, "Content-Type: application/json\r\n");
+        writeString(outputStream, "Content-Length: " + fullBody.length + "\r\n");
+        writeString(outputStream, "Connection: close\r\n\r\n");
+        outputStream.write(truncatedBody);
+        outputStream.flush();
+      } catch (IOException ignored) {
+        // ignore errors from shutting down the socket early
+      }
+    }
+
+    private void consumeRequest(InputStream inputStream) throws IOException {
+      BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.US_ASCII));
+      String line;
+      while ((line = reader.readLine()) != null && !line.isEmpty()) {
+        // consume request headers
+      }
+    }
+
+    private void writeString(OutputStream outputStream, String value) throws IOException {
+      outputStream.write(value.getBytes(StandardCharsets.US_ASCII));
+    }
   }
 }

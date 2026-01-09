@@ -23,6 +23,7 @@ package com.restfb;
 
 import static com.restfb.logging.RestFBLogger.HTTP_LOGGER;
 
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -391,7 +392,7 @@ public class DefaultWebRequestor implements WebRequestor {
 
   private Response sendRequest(HttpRequest httpRequest) throws IOException {
     try {
-      HttpResponse<byte[]> httpResponse = getHttpClient().send(httpRequest, BodyHandlers.ofByteArray());
+      HttpResponse<InputStream> httpResponse = getHttpClient().send(httpRequest, BodyHandlers.ofInputStream());
       Map<String, List<String>> headers = Collections.unmodifiableMap(toHeaderMap(httpResponse.headers()));
       HTTP_LOGGER.trace("Response headers: {}", headers);
       return createResponse(httpResponse, headers);
@@ -401,8 +402,36 @@ public class DefaultWebRequestor implements WebRequestor {
     }
   }
 
-  protected Response createResponse(HttpResponse<byte[]> httpResponse, Map<String, List<String>> headers) {
-    byte[] body = Optional.ofNullable(httpResponse.body()).orElse(new byte[0]);
+  private byte[] readResponseBody(HttpResponse<InputStream> httpResponse) throws IOException {
+    InputStream responseBody = httpResponse.body();
+    if (responseBody == null) {
+      return new byte[0];
+    }
+
+    long expectedLength = httpResponse.headers().firstValueAsLong("Content-Length").orElse(-1L);
+    long totalRead = 0;
+    byte[] buffer = new byte[8192];
+
+    try (InputStream bodyStream = responseBody; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+      int read;
+      while ((read = bodyStream.read(buffer)) != -1) {
+        output.write(buffer, 0, read);
+        totalRead += read;
+      }
+
+      if (expectedLength >= 0 && expectedLength != totalRead) {
+        throw new IOException("Incomplete response body: expected " + expectedLength + " bytes but read " + totalRead);
+      }
+
+      return output.toByteArray();
+    } catch (IOException ioe) {
+      throw new IOException("Incomplete response body", ioe);
+    }
+  }
+
+  protected Response createResponse(HttpResponse<InputStream> httpResponse, Map<String, List<String>> headers)
+      throws IOException {
+    byte[] body = readResponseBody(httpResponse);
     Response response = new Response(httpResponse.statusCode(), StringUtils.toString(body), null, headers);
     HTTP_LOGGER.debug("Facebook responded with {}", response);
     return response;

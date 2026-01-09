@@ -23,6 +23,8 @@ package com.restfb;
 
 import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Collections;
@@ -79,10 +81,12 @@ public class ETagWebRequestor extends DefaultWebRequestor {
   }
 
   @Override
-  protected Response createResponse(HttpResponse<byte[]> httpResponse, Map<String, List<String>> headers) {
+  protected Response createResponse(HttpResponse<InputStream> httpResponse, Map<String, List<String>> headers)
+      throws IOException {
     try {
       if (HttpMethod.GET.name().equals(httpResponse.request().method())) {
         if (httpResponse.statusCode() == HTTP_NOT_MODIFIED && currentETagRespThreadLocal.get() != null) {
+          closeQuietly(httpResponse.body());
           ETagResponse etagResp = currentETagRespThreadLocal.get();
           return new Response(httpResponse.statusCode(), etagResp.getBody(), null, headers);
         } else {
