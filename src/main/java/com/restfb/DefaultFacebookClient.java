@@ -314,23 +314,23 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
   }
 
   private RequestExecutionResult fetchConnectionPageResponse(String connectionPageUrl) {
+    WebRequestor.Request request;
     if (!isBlank(accessToken) && !isBlank(appSecret)) {
       if (isAppSecretProofWithTime()) {
         long now = System.currentTimeMillis() / 1000;
-        WebRequestor.Request request =
-            new WebRequestor.Request(
-              String.format("%s&%s=%s&%s=%s", connectionPageUrl, urlEncode(APP_SECRET_PROOF_TIME_PARAM_NAME), now,
-                urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken + "|" + now, appSecret)),
-              null);
-        return executeGetRequest(request);
+        request = new WebRequestor.Request(
+          String.format("%s&%s=%s&%s=%s", connectionPageUrl, urlEncode(APP_SECRET_PROOF_TIME_PARAM_NAME), now,
+            urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken + "|" + now, appSecret)),
+          null);
       } else {
-        WebRequestor.Request request = new WebRequestor.Request(String.format("%s&%s=%s", connectionPageUrl,
+        request = new WebRequestor.Request(String.format("%s&%s=%s", connectionPageUrl,
           urlEncode(APP_SECRET_PROOF_PARAM_NAME), obtainAppSecretProof(accessToken, appSecret)), null);
-        return executeGetRequest(request);
       }
+    } else {
+      request = new WebRequestor.Request(connectionPageUrl, getHeaderAccessToken());
     }
 
-    return executeGetRequest(new WebRequestor.Request(connectionPageUrl, getHeaderAccessToken()));
+    return executeGetRequestWithInfo(request);
   }
 
   /**
@@ -933,7 +933,14 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
       requestor = () -> webRequestor.executeGet(request);
     }
 
-    return executeRequestWithMetadata(httpMethod, request.getFullUrl(), requestor);
+    long requestStartTime = System.currentTimeMillis();
+    try {
+      return executeRequestWithMetadata(httpMethod, request.getFullUrl(), requestor);
+    } catch (FacebookException facebookException) {
+      facebookException.withInfoData(httpMethod, request.getFullUrl(), parameterString, headerAccessToken,
+        requestStartTime);
+      throw facebookException;
+    }
   }
 
   protected Response makeRequestForResponse(String endpoint, final boolean executeAsPost,
@@ -954,6 +961,17 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
   private RequestExecutionResult executeGetRequest(WebRequestor.Request request) {
     return executeRequestWithMetadata("GET", request.getFullUrl(), () -> webRequestor.executeGet(request));
+  }
+
+  private RequestExecutionResult executeGetRequestWithInfo(WebRequestor.Request request) {
+    long startTime = System.currentTimeMillis();
+    try {
+      return executeGetRequest(request);
+    } catch (FacebookException facebookException) {
+      facebookException.withInfoData("GET", request.getFullUrl(), request.getParameters(),
+        request.getHeaderAccessToken(), startTime);
+      throw facebookException;
+    }
   }
 
   private String getHeaderAccessToken() {

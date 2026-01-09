@@ -21,14 +21,20 @@
  */
 package com.restfb;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 
+import com.restfb.Body;
+import com.restfb.Parameter;
+import com.restfb.exception.FacebookException;
 import com.restfb.exception.FacebookGoawayNetworkException;
+import com.restfb.exception.FacebookNetworkException;
 import org.junit.jupiter.api.Test;
 
 import com.restfb.exception.FacebookRstStreamNetworkException;
+import com.restfb.json.JsonObject;
 
 class DefaultFacebookClientTest {
 
@@ -56,6 +62,44 @@ class DefaultFacebookClientTest {
       .isInstanceOf(FacebookGoawayNetworkException.class).hasMessageContaining("GOAWAY");
   }
 
+  @Test
+  void makeRequestEnrichesFacebookExceptionWithInfoData() {
+    InfoTrackingFacebookClient client = new InfoTrackingFacebookClient(new ThrowingWebRequestor());
+    client.setHeaderAuthorization(true);
+
+    assertThatThrownBy(client::invokeFailingMakeRequest).isInstanceOf(FacebookNetworkException.class)
+      .satisfies(throwable -> {
+        FacebookException exception = (FacebookException) throwable;
+        assertThat(exception.getInfoData()).isPresent();
+        FacebookException.InfoData info = exception.getInfoData().orElseThrow();
+        assertThat(info.getHttpMethod()).isEqualTo("GET");
+        assertThat(info.getFullEndpoint()).contains("/me");
+        assertThat(info.getParameterString()).contains("fields=id").contains("format=json");
+        assertThat(info.getHeaderAccessToken()).isEqualTo("token");
+        assertThat(info.getDuration()).isNotNull();
+      });
+  }
+
+  @Test
+  void fetchConnectionPageEnrichesFacebookExceptionWithInfoData() {
+    InfoTrackingFacebookClient client = new InfoTrackingFacebookClient(new ThrowingWebRequestor());
+    client.setHeaderAuthorization(true);
+
+    String connectionUrl = "https://graph.facebook.com/me/feed?after=cursor";
+
+    assertThatThrownBy(() -> client.fetchConnectionPageWithResult(connectionUrl, JsonObject.class))
+      .isInstanceOf(FacebookNetworkException.class).satisfies(throwable -> {
+        FacebookException exception = (FacebookException) throwable;
+        assertThat(exception.getInfoData()).isPresent();
+        FacebookException.InfoData info = exception.getInfoData().orElseThrow();
+        assertThat(info.getHttpMethod()).isEqualTo("GET");
+        assertThat(info.getFullEndpoint()).isEqualTo(connectionUrl);
+        assertThat(info.getParameterString()).isNull();
+        assertThat(info.getHeaderAccessToken()).isEqualTo("token");
+        assertThat(info.getDuration()).isNotNull();
+      });
+  }
+
   private static class TestableFacebookClient extends DefaultFacebookClient {
     TestableFacebookClient() {
       super("token", new DefaultWebRequestor(), new DefaultJsonMapper(), Version.LATEST);
@@ -63,6 +107,34 @@ class DefaultFacebookClientTest {
 
     void invokeMakeRequest(Requestor requestor) {
       executeRequestWithMetadata(null, null, requestor);
+    }
+  }
+
+  private static class InfoTrackingFacebookClient extends DefaultFacebookClient {
+    InfoTrackingFacebookClient(WebRequestor webRequestor) {
+      super("token", webRequestor, new DefaultJsonMapper(), Version.LATEST);
+    }
+
+    void invokeFailingMakeRequest() {
+      makeRequestWithMetadata("me", false, false, null, (Body) null, Parameter.with("fields", "id"));
+    }
+  }
+
+  private static class ThrowingWebRequestor implements WebRequestor {
+
+    @Override
+    public Response executeGet(Request request) throws IOException {
+      throw new IOException("network broken");
+    }
+
+    @Override
+    public Response executePost(Request request) throws IOException {
+      throw new IOException("network broken");
+    }
+
+    @Override
+    public Response executeDelete(Request request) throws IOException {
+      throw new IOException("network broken");
     }
   }
 }
