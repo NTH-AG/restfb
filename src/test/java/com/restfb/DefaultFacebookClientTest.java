@@ -87,7 +87,7 @@ class DefaultFacebookClientTest {
 
     String connectionUrl = "https://graph.facebook.com/me/feed?after=cursor";
 
-    assertThatThrownBy(() -> client.fetchConnectionPageWithResult(connectionUrl, JsonObject.class))
+    assertThatThrownBy(() -> client.fetchConnectionPage(connectionUrl, JsonObject.class))
       .isInstanceOf(FacebookNetworkException.class).satisfies(throwable -> {
         FacebookException exception = (FacebookException) throwable;
         assertThat(exception.getInfoData()).isPresent();

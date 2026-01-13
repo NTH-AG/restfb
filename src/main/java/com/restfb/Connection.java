@@ -55,6 +55,7 @@ public class Connection<T> implements Iterable<List<T>> {
   private String order;
   private String json;
   private T typedSummary;
+  private ResponseMetadata responseMetadata;
 
   /**
    * @see java.lang.Iterable#iterator()
@@ -339,6 +340,25 @@ public class Connection<T> implements Iterable<List<T>> {
    */
   public String getJson() {
     return json;
+  }
+
+  /**
+   * Returns the metadata of the response that created this {@link Connection}.
+   *
+   * @return response metadata or {@code null} if unavailable
+   */
+  public ResponseMetadata getResponseMetadata() {
+    return responseMetadata;
+  }
+
+  /**
+   * Attaches response metadata to this connection.
+   *
+   * @param responseMetadata
+   *          metadata captured while fetching the connection
+   */
+  public void setResponseMetadata(ResponseMetadata responseMetadata) {
+    this.responseMetadata = responseMetadata;
   }
 
   /**

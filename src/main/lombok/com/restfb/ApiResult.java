@@ -23,13 +23,9 @@ package com.restfb;
 
 import java.io.Serializable;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import lombok.Getter;
+import java.util.Optional;
 
 /**
  * Carries the result of a Graph API call plus response metadata such as debug headers.
@@ -37,56 +33,57 @@ import lombok.Getter;
  * @param <T>
  *          type of the mapped result
  */
-@Getter
 public final class ApiResult<T> implements Serializable {
 
   private static final long serialVersionUID = 1L;
 
   private final T result;
 
-  private final DebugHeaderInfo debugHeaderInfo;
+  private final ResponseMetadata responseMetadata;
 
-  private final Map<String, List<String>> responseHeaders;
-
-  private final Duration duration;
-
-  private final String httpMethod;
-
-  private final String requestUrl;
-
-  private ApiResult(T result, DebugHeaderInfo debugHeaderInfo, Map<String, List<String>> responseHeaders,
-      Duration duration, String httpMethod, String requestUrl) {
+  private ApiResult(T result, ResponseMetadata responseMetadata) {
     this.result = result;
-    this.debugHeaderInfo = debugHeaderInfo;
-    this.responseHeaders = responseHeaders;
-    this.duration = duration;
-    this.httpMethod = httpMethod;
-    this.requestUrl = requestUrl;
+    this.responseMetadata = responseMetadata;
   }
 
   public static <T> ApiResult<T> withMetadata(T result, DebugHeaderInfo debugHeaderInfo,
       Map<String, List<String>> responseHeaders, Duration duration, String httpMethod, String requestUrl) {
-    return new ApiResult<>(result, debugHeaderInfo, copyHeaders(responseHeaders), duration, httpMethod,
-      requestUrl);
+    return withMetadata(result, ResponseMetadata.of(debugHeaderInfo, responseHeaders, duration, httpMethod, requestUrl));
+  }
+
+  public static <T> ApiResult<T> withMetadata(T result, ResponseMetadata responseMetadata) {
+    return new ApiResult<>(result, responseMetadata);
   }
 
   public static <T> ApiResult<T> withoutMetadata(T result) {
-    return new ApiResult<>(result, null, null, null, null, null);
+    return new ApiResult<>(result, null);
   }
 
-  private static Map<String, List<String>> copyHeaders(Map<String, List<String>> headers) {
-    if (headers == null || headers.isEmpty()) {
-      return Collections.emptyMap();
-    }
+  public T getResult() {
+    return result;
+  }
 
-    Map<String, List<String>> copy = new LinkedHashMap<>();
-    headers.forEach((key, value) -> {
-      if (value == null) {
-        copy.put(key, null);
-      } else {
-        copy.put(key, Collections.unmodifiableList(new ArrayList<>(value)));
-      }
-    });
-    return Collections.unmodifiableMap(copy);
+  public ResponseMetadata getResponseMetadata() {
+    return responseMetadata;
+  }
+
+  public DebugHeaderInfo getDebugHeaderInfo() {
+    return Optional.ofNullable(responseMetadata).map(ResponseMetadata::getDebugHeaderInfo).orElse(null);
+  }
+
+  public Map<String, List<String>> getResponseHeaders() {
+    return Optional.ofNullable(responseMetadata).map(ResponseMetadata::getResponseHeaders).orElse(null);
+  }
+
+  public Duration getDuration() {
+    return Optional.ofNullable(responseMetadata).map(ResponseMetadata::getDuration).orElse(null);
+  }
+
+  public String getHttpMethod() {
+    return Optional.ofNullable(responseMetadata).map(ResponseMetadata::getHttpMethod).orElse(null);
+  }
+
+  public String getRequestUrl() {
+    return Optional.ofNullable(responseMetadata).map(ResponseMetadata::getRequestUrl).orElse(null);
   }
 }

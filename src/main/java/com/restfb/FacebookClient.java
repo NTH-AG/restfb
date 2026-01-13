@@ -173,33 +173,12 @@ public interface FacebookClient {
    *          Connection type token.
    * @param parameters
    *          URL parameters to include in the API call (optional).
-   * @return An instance of type {@code connectionType} which contains the requested Connection's data.
+   * @return An instance of type {@code connectionType} which contains the requested Connection's data. Metadata about the
+   *         HTTP response can be accessed via {@link Connection#getResponseMetadata()}.
    * @throws FacebookException
    *           If an error occurs while performing the API call.
    */
   <T> Connection<T> fetchConnection(String connection, Class<T> connectionType, Parameter... parameters);
-
-  /**
-   * Variant of {@link #fetchConnection(String, Class, Parameter...)} that exposes response metadata in an
-   * {@link ApiResult} wrapper.
-   *
-   * @param <T>
-   *          Java type to map to.
-   * @param connection
-   *          The Connection to fetch.
-   * @param connectionType
-   *          Object type token.
-   * @param parameters
-   *          URL parameters to include in the API call.
-   * @return ApiResult containing the {@link Connection} plus response metadata.
-   * @throws FacebookException
-   *           If an error occurs while performing the API call.
-   * @since 2026.0.0
-   */
-  default <T> ApiResult<Connection<T>> fetchConnectionWithResult(String connection, Class<T> connectionType,
-      Parameter... parameters) {
-    return ApiResult.withoutMetadata(fetchConnection(connection, connectionType, parameters));
-  }
 
   /**
    * Fetches a previous/next page of a Graph API {@code Connection} type, mapping the result to an instance of
@@ -212,31 +191,12 @@ public interface FacebookClient {
    *          {@link Connection#getNextPageUrl()}.
    * @param connectionType
    *          Connection type token.
-   * @return An instance of type {@code connectionType} which contains the requested Connection's data.
+   * @return An instance of type {@code connectionType} which contains the requested Connection's data. Metadata about the
+   *         HTTP response can be accessed via {@link Connection#getResponseMetadata()}.
    * @throws FacebookException
    *           If an error occurs while performing the API call.
    */
   <T> Connection<T> fetchConnectionPage(String connectionPageUrl, Class<T> connectionType);
-
-  /**
-   * Variant of {@link #fetchConnectionPage(String, Class)} that additionally exposes response metadata in an
-   * {@link ApiResult} wrapper (debug headers, response headers, HTTP method, duration, etc.).
-   *
-   * @param <T>
-   *          Java type to map to.
-   * @param connectionPageUrl
-   *          URL provided by Facebook to fetch the next page of the connection.
-   * @param connectionType
-   *          Connection type token.
-   * @return ApiResult containing the {@link Connection} page plus response metadata.
-   * @throws FacebookException
-   *           If an error occurs while performing the API call.
-   * @since 2026.0.0
-   */
-  default <T> ApiResult<Connection<T>> fetchConnectionPageWithResult(String connectionPageUrl,
-      Class<T> connectionType) {
-    return ApiResult.withoutMetadata(fetchConnectionPage(connectionPageUrl, connectionType));
-  }
 
   /**
    * Executes operations as a batch using the <a href="https://developers.facebook.com/docs/reference/api/batch/">Batch

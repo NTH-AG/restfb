@@ -280,18 +280,13 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> Connection<T> fetchConnection(String connection, Class<T> connectionType, Parameter... parameters) {
-    return fetchConnectionWithResult(connection, connectionType, parameters).getResult();
-  }
-
-  @Override
-  public <T> ApiResult<Connection<T>> fetchConnectionWithResult(String connection, Class<T> connectionType,
-      Parameter... parameters) {
     verifyParameterPresence(CONNECTION, connection);
     verifyParameterPresence(CONNECTION_TYPE, connectionType);
     RequestExecutionResult executionResult = makeRequestWithMetadata(connection, parameters);
     Response response = executionResult.getResponse();
     Connection<T> connectionResult = new Connection<>(this, response.getBody(), connectionType);
-    return toApiResult(connectionResult, executionResult);
+    connectionResult.setResponseMetadata(toResponseMetadata(executionResult));
+    return connectionResult;
   }
 
   /**
@@ -299,18 +294,14 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
    */
   @Override
   public <T> Connection<T> fetchConnectionPage(final String connectionPageUrl, Class<T> connectionType) {
-    return fetchConnectionPageWithResult(connectionPageUrl, connectionType).getResult();
-  }
-
-  @Override
-  public <T> ApiResult<Connection<T>> fetchConnectionPageWithResult(String connectionPageUrl, Class<T> connectionType) {
     verifyParameterPresence("connectionPageUrl", connectionPageUrl);
     verifyParameterPresence(CONNECTION_TYPE, connectionType);
 
     RequestExecutionResult executionResult = fetchConnectionPageResponse(connectionPageUrl);
     String connectionJson = executionResult.getResponse().getBody();
     Connection<T> connection = new Connection<>(this, connectionJson, connectionType);
-    return toApiResult(connection, executionResult);
+    connection.setResponseMetadata(toResponseMetadata(executionResult));
+    return connection;
   }
 
   private RequestExecutionResult fetchConnectionPageResponse(String connectionPageUrl) {
@@ -400,13 +391,20 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
   }
 
   private <T> ApiResult<T> toApiResult(T result, RequestExecutionResult executionResult) {
-    Response response = Optional.ofNullable(executionResult).map(RequestExecutionResult::getResponse).orElse(null);
+    return ApiResult.withMetadata(result, toResponseMetadata(executionResult));
+  }
+
+  private ResponseMetadata toResponseMetadata(RequestExecutionResult executionResult) {
+    if (executionResult == null) {
+      return null;
+    }
+    Response response = executionResult.getResponse();
     DebugHeaderInfo debugHeaderInfo = Optional.ofNullable(response).map(Response::getDebugHeaderInfo).orElse(null);
     Map<String, List<String>> headers = Optional.ofNullable(response).map(Response::getHeaders).orElse(null);
     Duration duration = Optional.ofNullable(executionResult).map(RequestExecutionResult::getDuration).orElse(null);
     String httpMethod = Optional.ofNullable(executionResult).map(RequestExecutionResult::getHttpMethod).orElse(null);
     String requestUrl = Optional.ofNullable(executionResult).map(RequestExecutionResult::getRequestUrl).orElse(null);
-    return ApiResult.withMetadata(result, debugHeaderInfo, headers, duration, httpMethod, requestUrl);
+    return ResponseMetadata.of(debugHeaderInfo, headers, duration, httpMethod, requestUrl);
   }
 
   /**

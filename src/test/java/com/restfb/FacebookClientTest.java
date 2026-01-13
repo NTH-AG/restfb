@@ -42,6 +42,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import com.restfb.Connection;
+import com.restfb.ResponseMetadata;
 import com.restfb.WebRequestor.Response;
 import com.restfb.exception.FacebookJsonMappingException;
 import com.restfb.exception.FacebookOAuthException;
@@ -183,14 +184,31 @@ class FacebookClientTest {
     DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
       new Response(200, "{\"data\":[]}", null, headers));
 
-    ApiResult<Connection<User>> result =
-        facebookClient.fetchConnectionPageWithResult("https://graph.facebook.com/foo", User.class);
+    Connection<User> result = facebookClient.fetchConnectionPage("https://graph.facebook.com/foo", User.class);
 
-    assertThat(result.getResult()).isNotNull();
-    assertThat(result.getResponseHeaders()).containsEntry("facebook-api-version",
+    ResponseMetadata metadata = result.getResponseMetadata();
+    assertThat(metadata).isNotNull();
+    assertThat(metadata.getResponseHeaders()).containsEntry("facebook-api-version",
       Collections.singletonList("v25.0"));
-    assertThat(result.getHttpMethod()).isEqualTo("GET");
-    assertThat(result.getRequestUrl()).contains("graph.facebook.com");
+    assertThat(metadata.getHttpMethod()).isEqualTo("GET");
+    assertThat(metadata.getRequestUrl()).contains("graph.facebook.com");
+  }
+
+  @Test
+  void fetchConnectionResultContainsMetadata() {
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put("facebook-api-version", Collections.singletonList("v25.0"));
+    DefaultFacebookClient facebookClient = (DefaultFacebookClient) facebookClientWithResponse(
+      new Response(200, "{\"data\":[]}", null, headers));
+
+    Connection<User> result = facebookClient.fetchConnection("me/friends", User.class);
+
+    ResponseMetadata metadata = result.getResponseMetadata();
+    assertThat(metadata).isNotNull();
+    assertThat(metadata.getResponseHeaders()).containsEntry("facebook-api-version",
+      Collections.singletonList("v25.0"));
+    assertThat(metadata.getHttpMethod()).isEqualTo("GET");
+    assertThat(metadata.getRequestUrl()).contains("me/friends");
   }
 
   @Test
