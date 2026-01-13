@@ -380,4 +380,12 @@ public class Connection<T> implements Iterable<List<T>> {
   public void setPreviousPageUrl(String previousPageUrl) {
     this.previousPageUrl = previousPageUrl;
   }
+
+  /**
+   * fetch the currently used {@see FacebookClient}
+   * @return the used FacebookClient
+   */
+  public FacebookClient getFacebookClient() {
+    return facebookClient;
+  }
 }
