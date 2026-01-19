@@ -39,6 +39,7 @@ import com.restfb.json.JsonValue;
 import com.restfb.types.features.HasComments;
 import com.restfb.types.features.HasCreatedTime;
 import com.restfb.types.features.HasMessage;
+import com.restfb.util.MessageTagUtils;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -1426,6 +1427,15 @@ public class Post extends FacebookType implements HasComments, HasCreatedTime, H
 
   public void removeMessageTag(MessageTag messageTag) {
     messageTags.remove(messageTag);
+  }
+
+  /**
+   * Returns the {@link #getMessage() message} where tagged segments have been replaced with their mention syntax.
+   *
+   * @return normalized message text or the original message if it cannot be normalized
+   */
+  public String getNormalizedMessage() {
+    return MessageTagUtils.normalizeMessage(message, messageTags);
   }
 
   /**

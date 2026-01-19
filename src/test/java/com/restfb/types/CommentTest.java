@@ -121,4 +121,33 @@ class CommentTest extends AbstractJsonMapperTests {
     assertEquals(13, tag.getLength().intValue());
   }
 
+  @Test
+  void messageNormalizedRebuildsMentions() {
+    Comment comment = new Comment();
+    comment.setMessage("Hello Foo Bar");
+
+    MessageTag tag = new MessageTag();
+    tag.setOffset(6);
+    tag.setLength(3);
+    tag.setId("123456");
+    tag.setName("Foo");
+    comment.addMessageTag(tag);
+
+    assertEquals("Hello @[123456] Bar", comment.getNormalizedMessage());
+  }
+
+  @Test
+  void messageNormalizedFallsBackToOriginal() {
+    Comment comment = new Comment();
+    comment.setMessage("Hello Foo");
+
+    MessageTag tag = new MessageTag();
+    tag.setOffset(60);
+    tag.setLength(3);
+    tag.setId("123456");
+    comment.addMessageTag(tag);
+
+    assertEquals("Hello Foo", comment.getNormalizedMessage());
+  }
+
 }

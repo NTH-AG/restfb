@@ -216,6 +216,35 @@ class PostTest extends AbstractJsonMapperTests {
   }
 
   @Test
+  void messageNormalizedRebuildsMentions() {
+    Post post = new Post();
+    post.setMessage("Hello Foo Bar");
+
+    MessageTag tag = new MessageTag();
+    tag.setOffset(6);
+    tag.setLength(3);
+    tag.setId("123456");
+    tag.setName("Foo");
+    post.addMessageTag(tag);
+
+    assertEquals("Hello @[123456] Bar", post.getNormalizedMessage());
+  }
+
+  @Test
+  void messageNormalizedFallsBackToOriginal() {
+    Post post = new Post();
+    post.setMessage("Hello Foo");
+
+    MessageTag tag = new MessageTag();
+    tag.setOffset(100);
+    tag.setLength(3);
+    tag.setId("123456");
+    post.addMessageTag(tag);
+
+    assertEquals("Hello Foo", post.getNormalizedMessage());
+  }
+
+  @Test
   void checkV2_5_likesSummary_canHasLike() {
     Post examplePost = createJsonMapper().toJavaObject(jsonFromClasspath("v2_5/post-likes-summary"), Post.class);
     assertNotNull(examplePost);
