@@ -935,7 +935,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     try {
       return executeRequestWithMetadata(httpMethod, request.getFullUrl(), requestor);
     } catch (FacebookException facebookException) {
-      facebookException.withInfoData(httpMethod, request.getFullUrl(), parameterString, headerAccessToken,
+      facebookException.withInfoData(httpMethod, request.getUrl(), parameterString, headerAccessToken,
         requestStartTime);
       throw facebookException;
     }
@@ -966,7 +966,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     try {
       return executeGetRequest(request);
     } catch (FacebookException facebookException) {
-      facebookException.withInfoData("GET", request.getFullUrl(), request.getParameters(),
+      facebookException.withInfoData("GET", request.getUrl(), request.getParameters(),
         request.getHeaderAccessToken(), startTime);
       throw facebookException;
     }
