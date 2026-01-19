@@ -777,8 +777,9 @@ public class DefaultJsonMapper implements JsonMapper {
   private Optional<Connection> convertRawValueToConnection(FieldWithAnnotation<Facebook> fieldWithAnnotation,
       JsonValue rawValue) {
     if (null != facebookClient) {
-      return Optional.of(new Connection(facebookClient, jsonHelper.getStringFrom(rawValue),
-        getFirstParameterizedTypeArgument(fieldWithAnnotation.getField())));
+      String rawJson = jsonHelper.getStringFrom(rawValue);
+      Class<?> elementType = getFirstParameterizedTypeArgument(fieldWithAnnotation.getField());
+      return Optional.of(facebookClient.createConnection(rawJson, elementType));
     } else {
       MAPPER_LOGGER.warn(
         "Skipping java field {}, because it has the type Connection, but the given facebook client is null",

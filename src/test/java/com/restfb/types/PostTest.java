@@ -22,13 +22,11 @@
 package com.restfb.types;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
 
 import java.util.Date;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import com.restfb.*;
 
@@ -422,8 +420,7 @@ class PostTest extends AbstractJsonMapperTests {
   @Test
   void checkNestedConnection() {
     JsonMapper mapper = createJsonMapper();
-    FacebookClient mockClient = Mockito.mock(FacebookClient.class);
-    when(mockClient.getJsonMapper()).thenReturn(mapper);
+    FacebookClient mockClient = createMockFacebookClient(mapper);
     mapper.setFacebookClient(mockClient);
 
     ConnectionPost examplePost = mapper.toJavaObject(jsonFromClasspath("v5_0/post-with-comment"), ConnectionPost.class);

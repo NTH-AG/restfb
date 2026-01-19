@@ -284,7 +284,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
     verifyParameterPresence(CONNECTION_TYPE, connectionType);
     RequestExecutionResult executionResult = makeRequestWithMetadata(connection, parameters);
     Response response = executionResult.getResponse();
-    Connection<T> connectionResult = new Connection<>(this, response.getBody(), connectionType);
+    Connection<T> connectionResult = createConnection(response.getBody(), connectionType);
     connectionResult.setResponseMetadata(toResponseMetadata(executionResult));
     return connectionResult;
   }
@@ -299,7 +299,7 @@ public class DefaultFacebookClient extends BaseFacebookClient implements Faceboo
 
     RequestExecutionResult executionResult = fetchConnectionPageResponse(connectionPageUrl);
     String connectionJson = executionResult.getResponse().getBody();
-    Connection<T> connection = new Connection<>(this, connectionJson, connectionType);
+    Connection<T> connection = createConnection(connectionJson, connectionType);
     connection.setResponseMetadata(toResponseMetadata(executionResult));
     return connection;
   }

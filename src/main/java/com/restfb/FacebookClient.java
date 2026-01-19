@@ -199,6 +199,22 @@ public interface FacebookClient {
   <T> Connection<T> fetchConnectionPage(String connectionPageUrl, Class<T> connectionType);
 
   /**
+   * Factory method to create a {@link Connection} instance from raw JSON.
+   *
+   * @param connectionJson
+   *          raw JSON response data for the connection
+   * @param connectionType
+   *          Java type of the elements contained in the connection
+   * @param <T>
+   *          element type
+   * @return a new {@link Connection} based on the provided payload
+   * @since 2026.1.0
+   */
+  default <T> Connection<T> createConnection(String connectionJson, Class<T> connectionType) {
+    return new Connection<>(this, connectionJson, connectionType);
+  }
+
+  /**
    * Executes operations as a batch using the <a href="https://developers.facebook.com/docs/reference/api/batch/">Batch
    * API</a>.
    * 
