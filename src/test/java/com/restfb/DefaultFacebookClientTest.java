@@ -81,6 +81,21 @@ class DefaultFacebookClientTest {
   }
 
   @Test
+  void makeRequestExceptionContainsSingleParameterSet() {
+    InfoTrackingFacebookClient client = new InfoTrackingFacebookClient(new ThrowingWebRequestor());
+    client.setHeaderAuthorization(true);
+
+    assertThatThrownBy(client::invokeFailingMakeRequest).isInstanceOf(FacebookNetworkException.class)
+      .satisfies(throwable -> {
+        FacebookException exception = (FacebookException) throwable;
+        FacebookException.InfoData info = exception.getInfoData().orElseThrow();
+        assertThat(countOccurrences(info.getUrl(), "?")).isEqualTo(1);
+        assertThat(countOccurrences(info.getUrl(), "fields=id")).isEqualTo(1);
+        assertThat(countOccurrences(info.getUrl(), "format=json")).isEqualTo(1);
+      });
+  }
+
+  @Test
   void fetchConnectionPageEnrichesFacebookExceptionWithInfoData() {
     InfoTrackingFacebookClient client = new InfoTrackingFacebookClient(new ThrowingWebRequestor());
     client.setHeaderAuthorization(true);
@@ -136,5 +151,18 @@ class DefaultFacebookClientTest {
     public Response executeDelete(Request request) throws IOException {
       throw new IOException("network broken");
     }
+  }
+
+  private static int countOccurrences(String value, String substring) {
+    int count = 0;
+    int index = 0;
+    while (index != -1) {
+      index = value.indexOf(substring, index);
+      if (index != -1) {
+        count++;
+        index += substring.length();
+      }
+    }
+    return count;
   }
 }
