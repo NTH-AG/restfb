@@ -158,7 +158,13 @@ public abstract class FacebookException extends RuntimeException {
       } catch (Exception e) {
         parameterStringToReturn = parameterString;
       }
-      return fullEndpoint + (parameterString != null ? "?" + parameterStringToReturn : "");
+      String endpointToReturn;
+      try {
+        endpointToReturn = URLDecoder.decode(fullEndpoint, StandardCharsets.UTF_8);
+      } catch (Exception e) {
+        endpointToReturn = fullEndpoint;
+      }
+      return endpointToReturn + (parameterString != null ? "?" + parameterStringToReturn : "");
     }
 
     @Override
