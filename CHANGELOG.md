@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2026.1.0 (February 19, 2026)
+
+* Issue #1526: Java baseline switched to Java 11
+* Issue #1631: Default web request handling migrated from `HttpURLConnection` to Java `HttpClient` (including improved HTTP/2 handling)
+* Stream-based `BinaryAttachment` factory methods now use `Supplier<InputStream>` for safer retries and uploads
+* Response metadata handling improved with `ApiResult<T>` and direct connection metadata access
+* New `FacebookClient#createConnection(...)` hook added to customize connection instantiation
+* Error handling improved for API error payloads (including HTTP 200 error bodies), URL readability, and duplicate URL parameters in exceptions
+* Deprecated Graph API versions removed from the `Version` enum
+* Issue #1643: Graph API `v25.0` added to `Version` and `LATEST` updated accordingly
+* Issue #1608: `AGENTS.md` repository guidance added for AI coding assistants
+
 ## 2025.15.0 (October 20, 2025)
 
 * Issue #1612: Missing `Connections` added to `Ad` object
